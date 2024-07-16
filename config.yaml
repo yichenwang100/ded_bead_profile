@@ -1,0 +1,64 @@
+# config.yaml
+# This file contains the default configuration
+
+# Global setting
+config_path: "config.yaml"
+enable_seed: True  # apply seed globally
+seed: 42
+enable_gpu: True
+enable_rewrite_output_dir: True
+output_dir: 'C:\mydata\output\proj_ded_bead_profile\test0'
+enable_task_name: True
+enable_computational_test: False
+
+# Data
+dataset_dir: 'C:\mydata\dataset\proj_ded_bead_profile\20240619'
+dataset_name: 'some_dataset'
+enable_iterate_dataset: False # iterate for all sub datasets in the dataset_dir
+enable_light_dataset: True  # use pre-processed and compressed data
+enable_clean_data_only: True
+enable_standardization: True
+train_val_test_ratio: [0.8, 0.1, 0.1]
+batch_size: 16
+num_workers: 0  # no need to set if all data in GPU
+
+# Model
+model: "CSAX"  # None
+enable_iterate_model: False # iterate for all models
+param_size: 11   # number of expr. parameters
+n_seq_total: 5
+n_seq_before: 2
+n_seq_after: 2
+img_colors: 3
+img_size: 150
+resnet_fc_size: 512
+enable_resnet_in_model: False
+enable_residual_gamma: True
+enable_layer_norm: True
+enable_dropout: True
+dropout: 0.2
+lstm_layer_num: 1
+fc_hidden_size: 80 # 20, 40, 80, 160
+output_size: 3
+
+# Training
+num_epochs: 80
+lr: 5.0e-4  # learning rate
+enable_weight_decay: False
+wd: 0  # weight decay
+enable_adaptive_lr: True
+lr_gamma: 0.95  # lr reduction factor for each epoch
+early_stop: False
+
+# Checkpoint
+checkpoint_dir: "./"
+enable_save_best_model: True
+
+# Log
+log_dir: "logs/"
+enable_tensorboard: True
+enable_save_history_stats_to_csv: True
+enable_save_activation: False
+enable_save_attention: False
+enable_save_lstm_hidden: False
+
