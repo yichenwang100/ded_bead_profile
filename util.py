@@ -104,7 +104,28 @@ def setup_dir(config):
     print("> dataset_dir: ", os.path.abspath(config.dataset_dir))
     print("> dataset_path: ", os.path.abspath(os.path.join(config.dataset_dir, config.dataset_name)) + '.pt')
 
-    if config.enable_task_name:
+    if config.enable_uuid_naming:
+        # get a shortened UUID
+        def get_uuid(length=-1):
+            import uuid, base64
+            # Generate a UUID
+            uuid_obj = uuid.uuid4()
+
+            # Convert UUID to bytes
+            uuid_bytes = uuid_obj.bytes
+
+            # Encode bytes to Base64
+            short_uuid = base64.urlsafe_b64encode(uuid_bytes).rstrip(b'=').decode('utf-8')
+
+            if length > 0:
+                return short_uuid[0:length]
+
+            else:
+                return short_uuid
+
+        task_name = f"{get_uuid(length=8)}"
+
+    else:
         task_name = (f"{config.dataset_name}"
                      f" {config.model}"
                      f" b={config.batch_size}"
@@ -117,9 +138,9 @@ def setup_dir(config):
         if config.enable_dropout:
             task_name += f" drop={config.dropout}"
 
-        task_name += f" H={config.fc_hidden_size}"
+    task_name += f".{config.extra_name}" if config.extra_name is not None else ""
+    config.output_dir = config.output_dir + '/' + task_name + '/'
 
-        config.output_dir = config.output_dir + '/' + task_name + '/'
 
     # remove the project dir if it exists
     if config.enable_rewrite_output_dir:
@@ -139,19 +160,6 @@ def setup_dir(config):
     os.makedirs(config.checkpoint_dir, exist_ok=True)
     print("> checkpoint_dir: ", os.path.abspath(config.checkpoint_dir))
 
-
-def get_model_name(directory_name):
-    return directory_name.split(' ')[1]
-
-
-def get_sample_num(directory_name):
-    return int(directory_name.split(' ')[0].split('_')[-1])
-
-
-def get_interval(directory_name):
-    return int(directory_name.split(' ')[0].split('_')[-2])
-
-
 # backup the config to output folder
 def backup_config(config):
     output_file_path = os.path.join(config.output_dir, 'config.yaml')
@@ -167,12 +175,141 @@ def test_load_config():
     pprint(config)
 
 
-# calcualte mean abosolute precentage error (MAPE) from results file
-def compute_MAPE(y_pred, y_true, mean, std):
-    y_pred = y_pred * std + mean
-    y_true = y_true * std + mean
-    y_true, y_pred = np.array(y_true), np.array(y_pred)
-    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+def compute_ape(y_pred, y_true, eps=1e-6):
+    ape = torch.abs((y_true - y_pred) / y_true) * 100
+    ape[y_true.abs() < eps] = torch.nan
+    ape[(y_pred.abs() < eps) & (y_true.abs() < eps)] = 1
+    if torch.isnan(ape).all():
+        return torch.nan
+    return torch.nanmean(ape)
+
+
+def compute_iou(y_pred, y_true):
+    """
+    Calculate an IoU-like metric for scalar values representing the intersection of the area
+    under the predicted and true curves divided by the total area under the true curve.
+
+    Parameters:
+    y_true (torch.Tensor): Ground truth values, shape (batch_size, N).
+    y_pred (torch.Tensor): Predicted values, shape (batch_size, N).
+
+    Returns:
+    float: IoU-like metric.
+    """
+    # Ensure the input tensors are of the correct shape
+    assert y_pred.shape == y_true.shape
+
+    # Calculate the total area under the y_true curve using the trapezoidal rule
+    total_area_true = torch.trapz(y_true.abs(), dim=1)
+
+    # Calculate the intersection area
+    min_values = torch.min(y_true.abs(), y_pred.abs())
+    intersection_area = torch.trapz(min_values, dim=1)
+
+    # Compute the IoU-like metric
+    iou = intersection_area / total_area_true
+    return iou
+
+def time_to_HHMMSS(elapsed_time):
+    hours, rem = divmod(int(elapsed_time), 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+
+def calculate_dataset_size(obj, print_size=False):
+    total_size = 0
+    for attr_name in dir(obj):
+        # Skip private attributes and methods
+        if attr_name.startswith('_'):
+            continue
+
+        attr_value = getattr(obj, attr_name)
+        if isinstance(attr_value, torch.Tensor):
+            tensor_size = get_tensor_size(attr_value)
+
+            # Print the attribute name and value
+            if print_size:
+                print(f'{attr_name} has size {tensor_size/1e6} Mb')
+
+            total_size += tensor_size
+
+    if print_size:
+        print(f"total size: {total_size/1e6} Mb")
+    return total_size
+
+def get_tensor_size(tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.element_size() * tensor.nelement()
+    return 0
+
+param_str_list = [
+    "EXP_ID",
+    "POINT_ID",
+    "FREQUENCY",
+    "POWER_PATTERN",
+    "FEEDRATE_PATTERN",
+    "LINEIDX",
+    "RTCP",
+    "CLOCKWISE",
+    "CURVATURE",
+    "POWER",
+    "FEEDRATE",
+    "POWER_DIFF",
+    "FEEDRATE_DIFF"
+]
+def param_id_to_str(id):
+    return param_str_list[id]
+
+pos_str_list = [
+    "DISTANCE",
+    "TIME",
+    "AXIS_X",
+    "AXIS_Y",
+    "WCS_AXIS_X",
+    "WCS_AXIS_Y",
+    "AXIS_C",
+    "VEL_X",
+    "VEL_Y",
+    "VEL_C",
+    "ANGLE_WCS_AXIS",
+    "ANGLE_AXIS",
+    "ACC_X",
+    "ACC_Y",
+    "ACC_C"
+]
+def pos_id_to_str(id):
+    return pos_str_list[id]
+
+excel_headers = [
+    "EXP_ID", "POINT_ID",
+    "FREQUENCY", "POWER_PATTERN", "FEEDRATE_PATTERN", "LINEIDX",
+    "RTCP", "CLOCKWISE", "CURVATURE",
+    "POWER", "FEEDRATE", "POWER_DIFF", "FEEDRATE_DIFF",
+
+    "DISTANCE", "TIME",
+    "AXIS_X", "AXIS_Y", "WCS_AXIS_X",
+    "WCS_AXIS_Y", "AXIS_C", "VEL_X",
+    "VEL_Y", "VEL_C",
+    "ANGLE_WCS_AXIS", "ANGLE_AXIS",
+    "ACC_X", "ACC_Y", "ACC_C",
+
+    "W1", "W2", "W3", "W4", "H", "A",
+    "SIG_PARA1", "SIG_PARA2", "SIG_PARA3", "SIG_PARA4", "SIG_PARA5", "SIG_PARA6", "SIG_PARA7",
+    "REAL_PROFILE1", "REAL_PROFILE2", "REAL_PROFILE3", "REAL_PROFILE4", "REAL_PROFILE5", "REAL_PROFILE6",
+    "REAL_PROFILE7", "REAL_PROFILE8", "REAL_PROFILE9", "REAL_PROFILE10", "REAL_PROFILE11", "REAL_PROFILE12",
+    "REAL_PROFILE13", "REAL_PROFILE14", "REAL_PROFILE15", "REAL_PROFILE16", "REAL_PROFILE17", "REAL_PROFILE18",
+    "REAL_PROFILE19", "REAL_PROFILE20", "REAL_PROFILE21", "REAL_PROFILE22", "REAL_PROFILE23", "REAL_PROFILE24",
+    "REAL_PROFILE25", "REAL_PROFILE26", "REAL_PROFILE27", "REAL_PROFILE28", "REAL_PROFILE29", "REAL_PROFILE30",
+    "REAL_PROFILE31", "REAL_PROFILE32", "REAL_PROFILE33", "REAL_PROFILE34", "REAL_PROFILE35", "REAL_PROFILE36",
+    "REAL_PROFILE37", "REAL_PROFILE38", "REAL_PROFILE39", "REAL_PROFILE40",
+    "FIT_PROFILE1", "FIT_PROFILE2", "FIT_PROFILE3", "FIT_PROFILE4", "FIT_PROFILE5", "FIT_PROFILE6",
+    "FIT_PROFILE7", "FIT_PROFILE8", "FIT_PROFILE9", "FIT_PROFILE10", "FIT_PROFILE11", "FIT_PROFILE12",
+    "FIT_PROFILE13", "FIT_PROFILE14", "FIT_PROFILE15", "FIT_PROFILE16", "FIT_PROFILE17", "FIT_PROFILE18",
+    "FIT_PROFILE19", "FIT_PROFILE20", "FIT_PROFILE21", "FIT_PROFILE22", "FIT_PROFILE23", "FIT_PROFILE24",
+    "FIT_PROFILE25", "FIT_PROFILE26", "FIT_PROFILE27", "FIT_PROFILE28", "FIT_PROFILE29", "FIT_PROFILE30",
+    "FIT_PROFILE31", "FIT_PROFILE32", "FIT_PROFILE33", "FIT_PROFILE34", "FIT_PROFILE35", "FIT_PROFILE36",
+    "FIT_PROFILE37", "FIT_PROFILE38", "FIT_PROFILE39", "FIT_PROFILE40"
+]
 
 if __name__ == '__main__':
     # test config loading

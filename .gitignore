@@ -1,7 +1,7 @@
 temp/
 report/
-test_trivial.py
-todo.md
+temp/test_trivial.py
+temp/todo.md
 .idea/
 
 # Byte-compiled / optimized / DLL files

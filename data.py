@@ -1,70 +1,147 @@
-import os
+import os, shutil, sys, re
 from tqdm import tqdm
+
 import torch, torchvision
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from torchvision import datasets, transforms
+
+import pandas as pd
+from PIL import Image
+from torchvision import transforms
+import matplotlib.pyplot as plt
+
 from util import *
 
 
-class LightDataset(Dataset):
+class MyDataset(Dataset):
 
-    def __init__(self, config, data_mean=None, data_std=None):
+    def __init__(self, config):
         self.config = config
 
-        '''The sequence length'''
+        '''Prep Data Here'''
+        # load data from hard disk into tensor
+        if config.dataset_name == 'simu_data':
+            data_hidden_dim = (config.img_start_idx + config.img_embed_dim
+                               + config.param_start_idx + config.param_size
+                               + config.pos_start_idx + config.pos_size
+                               + config.output_size + 1)  # last 1 for mask
+            data_tensor = torch.randn((9999, data_hidden_dim))
+        else:
+            dataset_path = os.path.join(config.dataset_dir, config.dataset_name)
+            data_tensor = torch.load(dataset_path)
+
+        self.data_tensor = data_tensor  # into memory (not gpu memory)
+        self.param_index_lf = config.img_start_idx + config.img_embed_dim
+
+        idx_lf, idx_rt = config.img_start_idx, config.img_start_idx + config.img_embed_dim
+        self.data_img = data_tensor[:, idx_lf:idx_rt].to(config.device)
+
+        idx_lf, idx_rt = idx_rt + config.param_start_idx, idx_rt + config.param_start_idx + config.param_size
+        self.data_param = data_tensor[:, idx_lf:idx_rt].to(config.device)
+
+        idx_lf, idx_rt = idx_rt + config.pos_start_idx, idx_rt + config.pos_start_idx + config.pos_size
+        self.data_pos = data_tensor[:, idx_lf:idx_rt].to(config.device)
+
+        idx_lf, idx_rt = idx_rt + config.output_start_index, idx_rt + config.output_start_index + config.output_size
+        self.data_y = data_tensor[:, idx_lf:idx_rt].to(config.device)
+
+        ''' Get indexable data '''
         # | sequence before | this  | sequence after|
         # | x, x, ..., x,   | x,    | x, x, ..., x, |
         self.n_seq_before = config.n_seq_before
         self.n_seq_after = config.n_seq_after
-        self.n_seq = self.n_seq_before + self.n_seq_after + 1
-        self.input_size = config.resnet_fc_size
-        self.output_size = config.output_size
-        self.param_size = config.param_size
+        self.n_seq = config.n_seq_total
+        if self.n_seq != self.n_seq_before + self.n_seq_after + 1:
+            raise RuntimeError("self.n_seq != self.n_seq_before + self.n_seq_after + 1")
 
-        '''Prep Data Here'''
-        # load data from hard disk into tensor
-        if config.enable_light_dataset:
-            dataset_path = os.path.join(config.dataset_dir, config.dataset_name) + ".pt"
-            data_raw = torch.load(dataset_path)
+        '''Mask invalid data'''
+        self.data_mask = data_tensor[self.n_seq_before:-self.n_seq_after, -1]     # last column is data mask for valid profiles
+        self.data_valid_index = self.data_mask.nonzero(as_tuple=True)[0]
+        self.data_valid_index += self.n_seq_before
 
-        else:  # use random dataset
-            total_data_size = 50000
-            data_raw = torch.randn((total_data_size,
-                                         self.n_seq,
-                                         self.input_size + self.output_size + self.param_size))
+        self.data_len = len(self.data_valid_index)
 
-        self.data_len = len(data_raw)
-        self.data_x = data_raw[:, :, 0:self.input_size].to(config.device)
-        self.data_y_origin = data_raw[:, 0, self.input_size: self.input_size + self.output_size].to(config.device)
-        self.data_y = self.data_y_origin.clone()
-        self.data_p = data_raw[:, :, self.input_size + self.output_size:].to(config.device)
-
-        ''' standardization of y lables '''
-        if config.enable_standardization:
-            if data_mean is None:
-                self.data_mean = self.data_y_origin.view(-1, config.output_size).mean(0)
-            else:
-                self.data_mean = torch.tensor(data_mean).to(config.device)
-
-            if data_std is None:
-                self.data_std = self.data_y_origin.view(-1, config.output_size).std(0)
-            else:
-                self.data_std = torch.tensor(data_std).to(config.device)
-
-            self.data_y = (self.data_y - self.data_mean) / self.data_std
+        ''' Use stride for sub-sampling '''
+        self.n_seq_stride = config.n_seq_stride
+        self.data_len = self.data_len // self.n_seq_stride
 
     def __len__(self):
         return self.data_len
 
     def __getitem__(self, index):
-        return self.data_x[index], self.data_y[index], self.data_p[index], self.data_y_origin[index]
+        index = index * self.n_seq_stride
+        idx_center = self.data_valid_index[index]
+        idx_lf = idx_center - self.n_seq_before
+        idx_rt = idx_center + self.n_seq_after + 1
+        return (index,
+                self.data_img[idx_lf: idx_rt],
+                self.data_param[idx_lf: idx_rt],
+                self.data_pos[idx_lf: idx_rt],
+                self.data_y[idx_center])
+
+    def get_raw_data(self, index):
+        index = index * self.n_seq_stride
+        idx_center = self.data_valid_index[index]
+        return self.data_tensor[idx_center, self.param_index_lf:]
+
+
+class MyCombinedDataset(Dataset):
+    def __init__(self, config):
+        # iterate all dataset in the folder
+        file_list = [file for file in os.listdir(config.dataset_dir)
+                     if file.endswith('.pt')]
+
+        file_num = int(len(file_list) * config.dataset_iterate_ratio)
+        file_list = file_list[:file_num]
+
+        self.dataset_num = file_num
+        self.datasets = []
+        self.dataset_len = []
+        self.dataset_bytes = []
+        print(f"> Starting to load datasets (total number: [{file_num}])")
+        for i_file, file_name in enumerate(tqdm(file_list)):
+            config.dataset_name = file_name
+            dataset = MyDataset(config)
+            self.datasets.append(dataset)
+            self.dataset_len.append(dataset.__len__())
+            self.dataset_bytes.append(calculate_dataset_size(dataset))
+
+        self.cumulative_sizes = np.cumsum(self.dataset_len)
+        self.total_len = self.cumulative_sizes[-1]
+        self.total_bytes = np.sum(np.array(self.dataset_bytes, dtype=np.int64))
+
+    def __len__(self):
+        return self.total_len
+
+    def __getitem__(self, index):
+        if index >= self.total_len:
+            raise RuntimeError(f"Index {index} is out of range")
+
+        for i_dataset, cum_size in enumerate(self.cumulative_sizes):
+            if index < cum_size:
+                if i_dataset == 0:
+                    dataset_index = index
+                else:
+                    dataset_index = index - self.cumulative_sizes[i_dataset - 1]
+                item = self.datasets[i_dataset].__getitem__(dataset_index)
+                return (index, item[1], item[2], item[3], item[4])
+
+    def get_raw_data(self, index):
+        if index >= self.total_len:
+            raise RuntimeError(f"Index {index} is out of range")
+
+        for i_dataset, cum_size in enumerate(self.cumulative_sizes):
+            if index < cum_size:
+                if i_dataset == 0:
+                    dataset_index = index
+                else:
+                    dataset_index = index - self.cumulative_sizes[i_dataset - 1]
+                return self.datasets[i_dataset].get_raw_data(dataset_index)
 
 
 def get_dataloaders(dataset, config, shuffle=True):
     # train, val, test split
-    if 'train_val_test_ratio' not in config:
-        config.train_val_test_ratio = [0.8, 0.1, 0.1]
-
     assert sum(config.train_val_test_ratio) == 1.0, "The train_val_test_ratio must sum to 1.0"
 
     train_size = int(config.train_val_test_ratio[0] * len(dataset))
@@ -73,19 +150,14 @@ def get_dataloaders(dataset, config, shuffle=True):
 
     if shuffle:
         train_dataset, val_dataset, test_dataset = (
-            random_split(dataset, lengths=[train_size, val_size, test_size]))
+            random_split(dataset,
+                         lengths=[train_size, val_size, test_size],
+                         generator=torch.Generator().manual_seed(config.seed)))
     else:
         indices = list(range(len(dataset)))
         train_dataset = Subset(dataset, indices[:train_size])
         val_dataset = Subset(dataset, indices[train_size:train_size + val_size])
         test_dataset = Subset(dataset, indices[train_size + val_size:])
-
-    if config.enable_standardization:
-        val_dataset.dataset.data_mean = train_dataset.dataset.data_mean
-        val_dataset.dataset.data_std = train_dataset.dataset.data_std
-        test_dataset.dataset.data_mean = test_dataset.dataset.data_mean
-        test_dataset.dataset.data_std = test_dataset.dataset.data_std
-
 
     # prep dataloader
     train_loader = DataLoader(train_dataset,
@@ -110,192 +182,173 @@ def get_dataloaders(dataset, config, shuffle=True):
     return train_loader, val_loader, test_loader
 
 
-def TestDataTool():
+def test_dataset():
     config = load_config()  # load default config
 
-    dataset = LightDataset(config)
-    x, y = dataset[0]
-    print('\ndataset size:', len(dataset))
-    print('dataset in MB: ', x.element_size() * x.numel() * len(dataset) // (1024 ** 2))
-    print('dataset device: ', x.device)
-    print('x shape: ', x.shape)
-    print('y shape: ', y.shape)
-    print('x device', x.device)
-    print('y device', y.device)
+    print('> Testing Dataset...')
+    print(f"> config.enable_iterate_dataset: [{config.enable_iterate_dataset}]")
+    if config.enable_iterate_dataset:
+        dataset = MyCombinedDataset(config)
+        print('> dataset bytes (GB):', dataset.total_bytes / 1e9)
+    else:
+        dataset = MyDataset(config)
+        calculate_dataset_size(dataset, print_size=True)
 
+    print('> dataset length:', dataset.__len__())
+
+    data_item = dataset[0]
+    for element in data_item:
+        print(f"> element shape: {element.shape}, device: {element.device}")
+
+    print('\n> Testing Dataloader...')
     train_loader, val_loader, test_loader = get_dataloaders(dataset, config)
-    for x, y in train_loader:
+    for data_item in train_loader:
         break
 
-    print(f"\ntrain loader size: {len(train_loader)} mean: {train_loader.dataset.dataset.data_mean} std: {train_loader.dataset.dataset.data_std}")
-    print(f"val loader size: {len(val_loader)} mean: {val_loader.dataset.dataset.data_mean} std: {val_loader.dataset.dataset.data_std}")
-    print(f"test loader size: {len(test_loader)} mean: {test_loader.dataset.dataset.data_mean} std: {test_loader.dataset.dataset.data_std}")
-    print('x shape: ', x.shape)
-    print('y shape: ', y.shape)
-    print('x device', x.device)
-    print('y device', y.device)
+    print(f"> train loader size: {len(train_loader)} ")
+    print(f"> val loader size: {len(val_loader)} ")
+    print(f"> test loader size: {len(test_loader)} ")
+
+    for element in data_item:
+        print(f"> element shape: {element.shape}, device: {element.device}")
 
 
-def compress_data_to_tensor(input_dir):
+def create_dataset(xlsx_path, img_root_dir, output_dir):
+    print(f"> create_dataset_from_xlsx: {xlsx_path}")
+
     config = load_config()
 
-    def get_keys(filename):
-        # for folder name like '1_0.8_1_10' [frequency, amplitude, channel_id, sample_id]
-        parts = filename.split('_')
-        frequency, amplitude, channel_id, sample_id = [float(parts[i]) for i in range(len(parts))]
-        return frequency, amplitude, channel_id, sample_id
+    # Preprocess the image using ImageNet mean and std values adapted for grayscale
+    imagenet_mean = [0.485, 0.456, 0.406]
+    imagenet_std = [0.229, 0.224, 0.225]
+    grey_scale_mean = sum(imagenet_mean) / len(imagenet_mean)  # average mean
+    grey_scale_std = sum(imagenet_std) / len(imagenet_std)  # average std
 
-    def sort_key(filename):
-        # for folder name like '1_0.8_1_10'
-        a, b, c, d = get_keys(filename)
-        number = a * 1e9 + b * 1e6 + c * 1e3 + d
-        return int(number)
+    # Preprocess the image
+    image_transform = transforms.Compose([
+        transforms.CenterCrop(config.img_crop_pixel),
+        transforms.Resize(config.img_input_size),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[grey_scale_mean], std=[grey_scale_std]),
+    ])
 
-    dir_list = [entry.name for entry in os.scandir(input_dir) if entry.is_dir()]
-    dir_list = sorted(dir_list, key=sort_key)
-    data_len = len(dir_list)
-    print(f"> data_len is [{data_len}] in folder {input_dir} ")
+    # Load the pre-trained ResNet-50 model with the updated argument
+    import torchvision.models as models
+    weights = models.ResNet18_Weights.DEFAULT
+    cnn_model = models.resnet18(weights=weights)
 
-    n_seq_before = config.n_seq_before
-    n_seq_after = config.n_seq_after
-    n_seq = n_seq_before + n_seq_after + 1
+    # Modify the first convolutional layer to accept a single channel
+    # and average the weights across the three color channels
+    original_conv1 = cnn_model.conv1
+    cnn_model.conv1 = nn.Conv2d(1, 64,
+                                kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+    with torch.no_grad():
+        cnn_model.conv1.weight = nn.Parameter(original_conv1.weight.mean(dim=1, keepdim=True))
 
-    config.resnet_fc_size = 512     # the default features
-    config.param_size = (4      # from parameters
-                         + 2    # from overlap
-                         + 1    # from spatio
-                         + 4    # from file index
-                         )
+    # Replace the final linear layer with nn.Identity
+    cnn_model.fc = nn.Identity()
 
-    output_x = torch.zeros((data_len, n_seq, config.resnet_fc_size))
-    output_y = torch.zeros((data_len, n_seq, config.output_size))
-    output_p = torch.zeros((data_len, n_seq, config.param_size))
+    # Freeze the parameters
+    for param in cnn_model.parameters():
+        param.requires_grad = False
 
-    for i_dir, dir in enumerate(dir_list):
-        # load x (input)
-        for i_seq, seq in enumerate(range(-n_seq_before, config.n_seq_before + 1)):
-            temp_file_path = os.path.join(input_dir, dir + '/T_' + str(seq) + '.fea')
-            temp_x = torch.load(temp_file_path)
-            output_x[i_dir, i_seq] = temp_x
+    # Move model to GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    cnn_model = cnn_model.to(device)
 
-        # load y (output label)
-        temp_file_path = os.path.join(input_dir, dir + '/results.txt')
-        with open(temp_file_path, 'r') as file:
-            for line in file:
-                # Custom parsing logic here
-                line_data = line.strip().split(',')
-                line_data = [float(num) for num in line_data]
-                temp_y = torch.tensor(line_data)
-            output_y[i_dir, :, :] = torch.stack([temp_y] * n_seq, dim=0)
+    # Read the Excel file
+    dataset_name = os.path.splitext(os.path.basename(xlsx_path))[0]
+    print(f"> loading excels table [{dataset_name}], pls wait...")
+    df = pd.read_excel(xlsx_path)
 
-        # load p (parameter)
-        p_index = 0
-        temp_file_path = os.path.join(input_dir, dir + '/parameters.txt')
-        with open(temp_file_path, 'r') as file:
-            i_line = 0
-            for line in file:
-                # Custom parsing logic here
-                line_data = line.strip().split(',')
-                line_data = [float(num) for num in line_data]
-                output_p[i_dir, i_line, p_index:p_index+4] = torch.tensor(line_data)
-                i_line += 1
-        p_index += 4
+    # Creating pytroch tensor
+    tensors = []
+    t_start = time.time()
+    for index, row in df.iterrows():
+        if index % 2000 == 0:
+            print(f'> dataset [{dataset_name}] | index[{index}]/{len(df)} | elapsed: {time.time() - t_start}s')
+        img_filename = row['IMG']
+        img_path = os.path.join(img_root_dir, img_filename)
 
-        # load p (overlap)
-        temp_file_path = os.path.join(input_dir, dir + '/overlap.txt')
-        with open(temp_file_path, 'r') as file:
-            i_line = 0
-            for line in file:
-                # Custom parsing logic here
-                line_data = line.strip().split(',')
-                line_data = [float(num) for num in line_data]
-                output_p[i_dir, :, p_index] = torch.tensor(line_data)
-                p_index += 1
+        # Load and preprocess image
+        image = Image.open(img_path)
+        if image.mode != 'L':
+            image = image.convert('L')
+        image = image_transform(image).unsqueeze(0).to(device)  # add a batch dimension
+        cnn_features = cnn_model(image).cpu().squeeze(0)  # remove the batch dimension
 
-        # load p (spatio)
-        temp_file_path = os.path.join(input_dir, dir + '/spatio.txt')
-        with open(temp_file_path, 'r') as file:
-            i_line = 0
-            for line in file:
-                # Custom parsing logic here
-                line_data = line.strip().split(',')
-                line_data = [float(num) for num in line_data]
-                output_p[i_dir, :, p_index] = torch.tensor(line_data)
-                p_index += 1
+        # Control parameters (columns B=1 to N=13)
+        control_params = torch.tensor(row.iloc[1:14].values.astype(np.float32), dtype=torch.float32)
 
-        # add keys from filename
-        output_p[i_dir, :, p_index:p_index+4] = torch.tensor(get_keys(dir))
+        # Position data (columns O=14 to AC=28)
+        position_data = torch.tensor(row.iloc[14:29].values.astype(np.float32), dtype=torch.float32)
 
-    output = torch.cat((output_x, output_y, output_p), dim=2)
-    output_path = input_dir.rstrip('/') + '.pt'
-    torch.save(output, output_path)
+        # Label data (columns AD=29 to DR=121)
+        label_data = torch.tensor(row.iloc[29:122].values.astype(np.float32), dtype=torch.float32)
 
+        # make all negative value (due to camera error) to 0
+        label_data[label_data < 0] = 0
 
-def clean_data(path):
-    config = load_config()
+        # Create img mask (columns AQ=42 to CD=81)
+        if (row.iloc[42:82] == 0).all():
+            profile_mask = torch.tensor([0])
+        else:
+            profile_mask = torch.tensor([1])
 
-    data = torch.load(path)
+        # Concatenate all data
+        row_tensor = torch.cat((cnn_features, control_params, position_data, label_data, profile_mask))
+        tensors.append(row_tensor)
 
-    # check the output columns
-    # output_x = torch.zeros((data_len, n_seq, config.resnet_fc_size))
-    # output_y = torch.zeros((data_len, n_seq, config.output_size))
-    # output_p = torch.zeros((data_len, n_seq, config.param_size))
+    # Stack all row tensors to create the final dataset tensor
+    dataset_tensor = torch.stack(tensors)
 
-    data_len = data.shape[0]
-    output_y = data[:, :, config.resnet_fc_size:config.resnet_fc_size + config.output_size]
+    # profile_mask
+    mask_num = len(tensors) - dataset_tensor[:, -1].sum()
+    mask_ratio = mask_num / len(tensors)
+    print(f"> mask_num: {mask_num}, total_len: {len(tensors)}, mask_ratio: {mask_ratio}")
 
-    # Identify rows where all values are zero
-    non_zero_index = output_y.any(dim=-1).any(dim=-1)
-    null_data_count = (data_len - torch.sum(non_zero_index)).numpy()
-    print(f"> path: {path}"
-          f" | null data: [{null_data_count}/{data_len}={null_data_count / data_len * 100:.3f}%]")
-    data_filtered = data[non_zero_index]
-
-    # save data
-    new_file_name = os.path.join(os.path.dirname(path), f"clean_{os.path.basename(path)}")
-    torch.save(data_filtered, new_file_name)
-
-    # prep data for standardization
-    data_output = data_filtered[:, :, config.resnet_fc_size:config.resnet_fc_size + config.output_size]
-    output_mean = torch.mean(data_output.view(-1, config.output_size), dim=-0)
-    output_std = torch.std(data_output.view(-1, config.output_size), dim=0)
-    output_size = len(output_mean)
-    return output_mean, output_std, output_size
+    # Save the tensor
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    tensor_save_path = os.path.join(output_dir, f"{dataset_name}_dataset.pt")
+    torch.save(dataset_tensor, tensor_save_path)
+    print(f"> Dataset tensor saved at: {tensor_save_path} with size {dataset_tensor.size()}")
 
 
-def compress_all_data(root_dir, num_worker=1):
-    dir_list = [os.path.join(root_dir, entry.name) for entry in os.scandir(root_dir)
-                if entry.is_dir()
-                and entry.name.startswith('interval')]
+def pre_compress_all_img(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):
+    dir_list = [os.path.join(xlsx_root_dir, entry.name) for entry in os.scandir(xlsx_root_dir)
+                if entry.is_file()
+                and entry.name.endswith('.xlsx')
+                ]
 
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=num_worker) as executor:
         for i, dir in enumerate(dir_list):
-            executor.submit(compress_data_to_tensor, dir)
+            executor.submit(create_dataset, dir, img_root_dir, output_dir)
 
 
-def clean_all_data(root_dir, num_worker=1):
-    dir_list = [os.path.join(root_dir, entry.name) for entry in os.scandir(root_dir)
-                if entry.is_file() and entry.name.endswith('.pt')
-                and entry.name.startswith('interval')]
-
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=num_worker) as executor:
-        for i, dir in enumerate(dir_list):
-            executor.submit(clean_data, dir)
-
+# def plot_random_images(image_tensor, metadata_df, num_images=9):
+#     assert num_images <= image_tensor.shape[0], "Number of images to plot exceeds the number of available images"
+#
+#     indices = random.sample(range(image_tensor.shape[0]), num_images)
+#     images = image_tensor[indices]
+#
+#     fig, axes = plt.subplots(3, 3, figsize=(10, 10))
+#     axes = axes.flatten()
+#
+#     for img, ax, idx in zip(images, axes, indices):
+#         ax.imshow(img.squeeze(), cmap='gray')
+#         ax.set_title(f"Index: {idx}\nSec: {metadata_df.iloc[idx]['Second']} Ms: {metadata_df.iloc[idx]['Millisecond']}")
+#         ax.axis('off')
+#
+#     plt.tight_layout()
+#     plt.show()
 
 if __name__ == '__main__':
-    # TestDataTool()
+    test_dataset()
 
-    #  test: convert single folder
-    # parent_dir = r'C:\Users\wangy\Downloads\dataset\1_0.8_1_1'
-    # compress_data_to_tensor(parent_dir)
-
-    # # convert multiple folder in the root dir
-    # root_dir = r'C:\Users\wangy\Downloads\dataset'
-    # compress_all_data(root_dir, num_worker=8)
-
-    # # clean all data in single folder
-    root_dir = r'C:\mydata\dataset\proj_melt_pool_pred\20240625_single_line'
-    clean_all_data(root_dir, num_worker=8)
+    excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data'
+    img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240722'
+    # create_dataset(os.path.join(excel_root_dir, 'High_const_sin_1.xlsx'), img_root_dir, output_dir)
+    # pre_compress_all_img(excel_root_dir, img_root_dir, output_dir, num_worker=3)

@@ -11,21 +11,13 @@ def train(config):
     # set up dir
     setup_dir(config)
 
-    # Set up random seed
-    if config.enable_seed:
-        seed_everything(seed=config.seed)
-
     # Set up the device
     config.device = torch.device("cuda" if (config.enable_gpu and torch.cuda.is_available()) else "cpu")
 
     # Prepare data
-    dataset = LightDataset(config)
+    dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
     train_loader, val_loader, test_loader = get_dataloaders(dataset, config)
-
-    # Set up mean and std
-    if config.enable_standardization:
-        config.data_train_mean = train_loader.dataset.dataset.data_mean.cpu().tolist()
-        config.data_train_std = train_loader.dataset.dataset.data_std.cpu().tolist()
+    train_len, val_len = len(train_loader), len(val_loader)
 
     # Set up model, loss function, optimizer, and scheduler for adaptive lr
     model, criterion, optimizer, scheduler = get_model(config)
@@ -40,69 +32,125 @@ def train(config):
 
     # Create logger using pandas.dataframe and csv
     if config.enable_save_history_stats_to_csv:
-        column_header = ['epoch', 'lr', 'train_loss', 'val_loss', 'elapsed_t', 'gamma']
+        column_header = ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_mape', 'val_mape', 'extra']
         history_stats_df = pd.DataFrame(columns=column_header)
+
+    # Set up random seed
+    if config.enable_seed:
+        seed_everything(seed=config.seed)
 
     # Training loop starts
     print('\n> Training Loop Starts...')
+    profile_eps = config.profile_eps
     num_epochs = config.num_epochs
     best_model_loss = float('inf')
     best_model_stats = None
     best_model_wts = None
-    progress_bar = tqdm(range(num_epochs), ncols=100)
+    progress_bar = tqdm(range(num_epochs), ncols=120)
+    train_print_step = 0
+    val_print_step = 0
     t_start = time.time()
     for epoch in progress_bar:
         model.train()
-        train_loss = 0.0
-        for i, (x, y, _, _) in enumerate(train_loader):
+        train_loss_sum = 0.0
+        train_iou_sum = 0.0
+        t_train_start = time.time()
+        for i, (index, x_img, x_param, x_pos, y) in enumerate(train_loader):
             # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
 
             # Forward
-            y_pred = model(x)
+            y_pred = model(x_img, x_param, x_pos)
             loss = criterion(y_pred, y)
-            train_loss += loss.cpu().item()
+            train_loss_sum += loss.cpu().item()
+            train_iou_sum += compute_iou(y_pred, y).mean().cpu().item()
 
             # Backward and Optimization
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+            # Print
+            if i % (train_len // 19) == 0:
+                temp_train_loss = train_loss_sum / (i + 1)
+                temp_train_iou = train_iou_sum / (i + 1)
+                t_elapsed = (time.time() - t_train_start) / 60  # min
+                progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
+                                             f"| train [{i}]/{train_len}"
+                                             f", L:{temp_train_loss:.4f}"
+                                             f", iou:{temp_train_iou:.4f}"
+                                             f", t:[{t_elapsed:.1f}]/{t_elapsed / (i + 1) * train_len:.1f}min"
+                                             f"\t|")
+
+                if config.enable_tensorboard:
+                    train_print_step += 1
+                    logger.add_scalars(main_tag="loss",
+                                       tag_scalar_dict={'train': temp_train_loss},
+                                       global_step=train_print_step)
+                    logger.add_scalars(main_tag="iou",
+                                       tag_scalar_dict={'train': temp_train_iou},
+                                       global_step=train_print_step)
+
         # metrics and temp results
         lr = optimizer.param_groups[0]['lr']
-        train_loss_mean = train_loss / len(train_loader)
+        train_loss_mean = train_loss_sum / train_len
+        train_iou_mean = train_iou_sum / train_len
 
         # Validation
         model.eval()
-        val_loss = 0.0
+        val_loss_sum = 0.0
+        val_iou_sum = 0.0
+        t_val_start = time.time()
         with torch.no_grad():
-            for i, (x, y, _, _) in enumerate(val_loader):
+            for i, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
                 # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
-                y_pred = model(x)
+                y_pred = model(x_img, x_param, x_pos)
 
                 loss = criterion(y_pred, y)
-                val_loss += loss.cpu().item()
+                val_loss_sum += loss.cpu().item()
+                val_iou_sum += compute_iou(y_pred, y).mean().cpu().item()
+
+                # Print
+                if i % (val_len // 19) == 0:
+                    temp_val_loss = val_loss_sum / (i + 1)
+                    temp_val_iou = val_iou_sum / (i + 1)
+                    t_elapsed = (time.time() - t_val_start) / 60  # min
+                    progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
+                                                 f"| val [{i}]/{val_len}"
+                                                 f", L:{temp_val_loss:.4f}"
+                                                 f", iou:{temp_val_iou:.4f}"
+                                                 f", t:[{t_elapsed:.1f}]/{t_elapsed / (i + 1) * val_len:.1f}min"
+                                                 f"\t|")
+
+                    if config.enable_tensorboard:
+                        val_print_step += 1
+                        logger.add_scalars(main_tag="loss",
+                                           tag_scalar_dict={'val': temp_val_loss},
+                                           global_step=val_print_step)
+                        logger.add_scalars(main_tag="iou",
+                                           tag_scalar_dict={'val': temp_val_iou},
+                                           global_step=val_print_step)
 
         # metrics and temp results
-        val_loss_mean = val_loss / len(val_loader)
+        val_loss_mean = val_loss_sum / val_len
+        val_iou_mean = val_iou_sum / val_len
+
+        if config.enable_tensorboard:
+            logger.add_scalars(main_tag="ep_loss",
+                               tag_scalar_dict={'train': train_loss_mean,
+                                                'val': val_loss_mean},
+                               global_step=epoch)
+            logger.add_scalars(main_tag="ep_iou",
+                               tag_scalar_dict={'train': train_iou_mean,
+                                                'val': val_iou_mean},
+                               global_step=epoch)
 
         # Log
-        if config.enable_tensorboard:
-            logger.add_scalars(main_tag="loss",
-                               tag_scalar_dict={'train': train_loss_mean,
-                                                'val': val_loss_mean, },
-                               global_step=epoch, )
-
-            logger.add_scalars(main_tag="param",
-                               tag_scalar_dict={'lr': lr},
-                               global_step=epoch, )
-
         if config.enable_save_history_stats_to_csv:
-            # ['epoch', 'lr', 'train_loss', 'val_loss', 'elapsed_t']
-            epoch_stats = [epoch, lr,
-                           train_loss_mean, val_loss_mean,
-                           time.time() - t_start,
-                           model.gamma.cpu().item() if
-                           config.enable_residual_gamma and not config.model.endswith("Null") else 0]
+            # ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_iou', 'val_iou', 'extra']
+            extra_text = f""
+            epoch_stats = [epoch, time.time() - t_start, lr,
+                           train_loss_mean, val_loss_mean, train_iou_mean, val_iou_mean,
+                           extra_text]
             history_stats_df.loc[len(history_stats_df)] = epoch_stats
 
         if config.enable_save_best_model:
@@ -110,12 +158,6 @@ def train(config):
                 best_model_loss = val_loss_mean
                 best_model_stats = epoch_stats
                 best_model_wts = copy.deepcopy(model.state_dict())
-
-        # Print
-        progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
-                                     f"| L_train: {train_loss_mean:.4f}"
-                                     f", L_val: {val_loss_mean:.4f}"
-                                     f"\t|")
 
         # Adaptive learning rate
         if config.enable_adaptive_lr:
@@ -146,61 +188,7 @@ def train(config):
 if __name__ == '__main__':
     config_raw = get_config_from_cmd(argparse.ArgumentParser())
 
-    if config_raw.enable_iterate_dataset and config_raw.enable_iterate_model:
-        raise RuntimeError("Err: enable_iterate_dataset and enable_iterate_model could not both be True")
-
-    # iterate all dataset in the folder
-    t_start = time.time()
-    if config_raw.enable_light_dataset and config_raw.enable_iterate_dataset:
-        if config_raw.enable_clean_data_only:
-            file_list = [file for file in os.listdir(config_raw.dataset_dir)
-                         if file.endswith('.pt')
-                         # and get_interval(file) == 8
-                         and file.startswith('clean')]
-        else:
-            file_list = [file for file in os.listdir(config_raw.dataset_dir)
-                         if file.endswith('.pt')]
-
-        file_list = sorted(file_list, key=lambda d: get_sample_num(d.split('.')[0]))
-
-        for i_file, file_name in enumerate(file_list):
-            config_train = copy.deepcopy(config_raw)
-            file_name_base = file_name.split('.')[0]
-            config_train.dataset_name = file_name_base
-            config_train_dataset_interval = get_interval(file_name_base)
-            config_train.dataset_sample_number = get_sample_num(file_name_base)
-            if config_train.dataset_sample_number > 300:
-                print("! skip training file: ", file_name)
-                continue  # skip 400, 600
-
-
-            def time_to_HHMMSS(elapsed_time):
-                hours, rem = divmod(int(elapsed_time), 3600)
-                minutes, seconds = divmod(rem, 60)
-                return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-
-
-            time_elapsed = time.time() - t_start
-            time_elapsed_mean = (time_elapsed / i_file) if i_file > 0 else 0
-            time_remain = (time_elapsed / i_file * (len(file_list) - i_file)) if i_file > 0 else 0
-            print(f"\n\n", '>' * 100)
-            print(f"> Dataset: [{i_file}/{len(file_list)}]"
-                  f", Elapsed: {time_to_HHMMSS(time_elapsed)}"
-                  f", Mean: {time_to_HHMMSS(time_elapsed_mean)}"
-                  f", Remain: {time_to_HHMMSS(time_remain)}")
-            print(f'> dataset_name: ', config_train.dataset_name)
-            train(config_train)
-
-    # iterate all models
-    elif config_raw.enable_iterate_model:
-        model_list = ['CF1Null', 'CF2Null', 'CF1X', 'CF2X', 'CBLX', 'CSAX']
-        for model in model_list:
-            config_train = copy.deepcopy(config_raw)
-            config_train.model = model
-            print('\n> target model: ', config_train.model)
-            train(config_train)
-
-    elif config_raw.enable_computational_test:
+    if config_raw.enable_computational_test:
         model_list = ['CF1X', 'CF2X', 'CSAX', 'CBLX']
         k_list = [10, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
         for model in model_list:
@@ -208,14 +196,13 @@ if __name__ == '__main__':
                 print("\n")
                 print('>' * 50)
                 config_train = copy.deepcopy(config_raw)
-                config_train.fc_hidden_size = k
+                config_train.embed_dim = k
                 config_train.model = model
                 config_train.enable_tensorboard = False
                 config_train.enable_save_best_model = False
                 config_train.enable_save_activation = False
                 config_train.enable_save_attention = False
-                config_train.enable_save_lstm_hidden = False
-                print('> fc_hidden_size: ', config_train.fc_hidden_size)
+                print('> embed_dim: ', config_train.embed_dim)
                 print('> target model: ', config_train.model)
                 train(config_train)
 

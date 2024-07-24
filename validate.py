@@ -5,8 +5,8 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from util import *
-from model import get_model
-from data import LightDataset, get_dataloaders
+from model import *
+from data import *
 
 ''' Dataset decomposition
 Data
@@ -29,14 +29,9 @@ def test_trained_model(file_dir):
     '''temp override'''
     # config.enable_save_activation = True
     # config.enable_save_attention = True
-    config.enable_save_lstm_hidden = False
-
-    # Set the random seed for reproducibility
-    if config.enable_seed:
-        seed_everything(seed=config.seed)
 
     # Load the test dataset
-    dataset = LightDataset(config, data_mean=config.data_train_mean, data_std=config.data_train_std)
+    dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
     _, _, data_loader = get_dataloaders(dataset, config)
 
     # Initialize the model
@@ -46,14 +41,18 @@ def test_trained_model(file_dir):
     best_model_path = os.path.join(file_dir, 'best_model_wts.pth')
     if not os.path.exists(best_model_path):
         print(f"! path {best_model_path} does not exist!")
-        return
-    model.load_state_dict(torch.load(best_model_path))
+    #     return
+    # model.load_state_dict(torch.load(best_model_path))
 
     # Move the model to the appropriate device
     model = model.to(config.device)
 
+    # Set the random seed
+    if config.enable_seed:
+        seed_everything(seed=config.seed)
+
     # Validate the model
-    validate(config, model, criterion, data_loader)
+    validate(config, model, criterion, dataset, data_loader)
 
 
 def delopy_trained_model(dataset_dir, model_dir, output_dir):
@@ -78,14 +77,13 @@ def delopy_trained_model(dataset_dir, model_dir, output_dir):
     '''temp override'''
     config.enable_save_activation = True
     config.enable_save_attention = True
-    config.enable_save_lstm_hidden = False
 
     # Set the random seed for reproducibility
     if config.enable_seed:
         seed_everything(seed=config.seed)
 
     # Load the test dataset
-    dataset = LightDataset(config, data_mean=config.data_train_mean, data_std=config.data_train_std)
+    dataset = MyDataset(config, data_mean=config.data_train_mean, data_std=config.data_train_std)
     _, _, data_loader = get_dataloaders(dataset, config, shuffle=False)
 
     # Initialize the model
@@ -102,153 +100,92 @@ def delopy_trained_model(dataset_dir, model_dir, output_dir):
     model = model.to(config.device)
 
     # Validate the model
-    validate(config, model, criterion, data_loader)
+    validate(config, model, criterion, dataset, data_loader)
 
 
-def validate(config, model, criterion, data_loader):
+def validate(config, model, criterion, dataset, data_loader):
     # Set the model to evaluation mode
     model.eval()
 
     ''' Test Starts '''
-    val_batch_size = 1
     val_loss = 0.0
-    val_y_true_history = torch.zeros((val_batch_size, len(data_loader), config.output_size))
-    val_y_original_history = torch.zeros_like(val_y_true_history)
+    val_raw_data_history = torch.zeros((len(data_loader), config.raw_data_size))    # add a mask column
+    val_y_true_history = torch.zeros((len(data_loader), config.output_size))    # batch size = 1
     val_y_pred_history = torch.zeros_like(val_y_true_history)
-    val_activation_history = torch.zeros((val_batch_size, len(data_loader),
-                                          config.n_seq_total * config.fc_hidden_size))
-    val_p_history = torch.zeros((val_batch_size, len(data_loader),
-                                 config.n_seq_total * config.param_size))
+    val_y_iou = torch.zeros((len(data_loader), 1))
 
-    if config.model.startswith('CSAX') and config.enable_save_attention:
-        val_attention_map_history = torch.zeros((val_batch_size, len(data_loader),
-                                                 config.n_seq_total, config.n_seq_total))
-        val_attention_gamma_hisotry = torch.zeros((val_batch_size, len(data_loader)))
-        # val_attention_out_history = torch.zeros((val_batch_size, len(data_loader),
-        #                                          config.n_seq_total, config.fc_hidden_size))
-        # val_attention_final_out_history = torch.zeros_like(val_attention_out_history)
-
-    if config.model.startswith('CBLX') and config.enable_save_lstm_hidden:
-        val_lstm_hidden_history = torch.zeros((val_batch_size, len(data_loader),
-                                               config.n_seq_total, config.fc_hidden_size))
+    # val_activation_history = torch.zeros((val_batch_size, len(data_loader),
+    #                                       config.n_seq_total * config.embed_dim))
+    # val_p_history = torch.zeros((val_batch_size, len(data_loader),
+    #                              config.n_seq_total * config.param_size))
 
     t_start = time.time()
     with torch.no_grad():
-        for i, (x, y, p, y_original) in enumerate(tqdm(data_loader)):
+        for i, (index, x_img, x_param, x_pos, y) in enumerate(tqdm(data_loader)):
             # x, y = x.to(config.device), y.to(config.device)
-            y_pred = model(x)
+            y_pred = model(x_img, x_param, x_pos)
 
             loss = criterion(y_pred, y)
             val_loss += loss.cpu().item()
 
-            val_y_true_history[:, i, :] = y.cpu().detach()
-            val_y_pred_history[:, i, :] = y_pred.cpu().detach()
-            val_p_history[:, i, :] = p.view(p.size()[0], -1).cpu().detach()
-            val_y_original_history[:, i, :] = y_original.cpu().detach()
+            val_y_true_history[i, :] = y.cpu().detach().squeeze(0)
+            val_y_pred_history[i, :] = y_pred.cpu().detach().squeeze(0)
 
-            if not config.model.startswith('CF1X') and config.enable_save_activation:
-                val_activation_history[:, i, :] = model.final.activation.detach()
+            raw_data = dataset.get_raw_data(index.cpu().item()).cpu()
+            val_raw_data_history[i, :] = raw_data[:-1] # get rid of the right most column for mask
+            val_y_iou[i, 0] = compute_iou(y_pred, y).mean().cpu().item()
 
-            if config.model.startswith('CSAX') and config.enable_save_attention:
-                val_attention_map_history[:, i, :, :] = model.st_layer.attn_map.detach()
-                # val_attention_out_history[:, i, :, :] = model.st_layer.attn_out.detach()
-                # val_attention_final_out_history[:, i, :, :] = model.st_layer.final_out.detach()
+            # if config.enable_save_activation:
+            #     val_activation_history[ i, :] = model.final.activation.detach()
 
-                if config.model == 'CSAXG':
-                    val_attention_gamma_hisotry[:, i] = model.st_layer.gamma.detach()
-
-            if config.model.startswith('CBLX') and config.enable_save_lstm_hidden:
-                val_lstm_hidden_history[:, i, :, :] = model.st_layer.hidden_data.detach()
+            # if config.enable_save_attention:
+            #     val_attention_map_history[i, :, :] = model.st_layer.attn_map.detach()
+            #
+            #     if config.model == 'CSAXG':
+            #         val_attention_gamma_hisotry[i] = model.st_layer.gamma.detach()
 
     # metrics and temp results
     val_loss_mean = val_loss / len(data_loader)
-    val_y_mse = [F.mse_loss(val_y_pred_history[:, :, i], val_y_true_history[:, :, i])
-                 for i in range(config.output_size)]
-    val_y_mse = np.array(val_y_mse)
+    val_iou_mean = val_y_iou.mean()
 
-    if config.enable_standardization:
-        data_mean = config.data_train_mean
-        data_std = config.data_train_std
-    else:
-        data_mean = [0, 0, 0]
-        data_std = [1, 1, 1]
-
-    [val_mape_h, val_mape_w, val_mape_a] = [compute_MAPE(val_y_pred_history[:, :, i], val_y_true_history[:, :, i],
-                                                         config.data_train_mean[i], config.data_train_std[i])
-                                            for i in range(config.output_size)]
-    val_mape = (val_mape_h + val_mape_w + val_mape_a) / 3
-
-    ''' stats on results '''
-    best_model_stats = [-1, -1,
-                        -1, -1, -1, -1,
-                        val_loss_mean, val_y_mse[0], val_y_mse[1], val_y_mse[2],
-                        val_mape, val_mape_h, val_mape_w, val_mape_a,
-                        time.time() - t_start]
 
     ''' Save Results '''
-    # save model activation
-    torch.save(val_activation_history, os.path.join(config.output_dir, "best_model_activation_test.pth"))
+    ''' save stats fro best model '''
+    column_header = ['epoch', 'elapsed_t', 'lr',
+                     'train_loss', 'val_loss', 'train_iou', 'val_iou',
+                     'extra']
+    best_model_stats = [-1, time.time() - t_start, -1,
+                        -1, val_loss_mean, -1, val_iou_mean,
+                        -1]
 
-    # save attention map
-    if config.model.startswith('CSAX') and config.enable_save_attention:
-        torch.save(val_attention_map_history, os.path.join(config.output_dir, "best_model_attn_map_test.pth"))
-        if config.model == 'CSAXG':
-            torch.save(val_attention_gamma_hisotry, os.path.join(config.output_dir, "best_model_attn_gamma_test.pth"))
-        # torch.save(val_attention_out_history, os.path.join(config.output_dir, "best_model_attn_out_test.pth"))
-        # torch.save(val_attention_final_out_history, os.path.join(config.output_dir, "best_model_attn_final_out_test.pth"))
-
-    if config.model.startswith('CBLX') and config.enable_save_lstm_hidden:
-        torch.save(val_lstm_hidden_history, os.path.join(config.output_dir, "best_model_lstm_hidden_test.pth"))
-
-    # save stats
-    column_header = ['epoch', 'lr',
-                     'train_loss', 'train_mse_h', 'train_mse_w', 'train_mse_a',
-                     'val_loss', 'val_mse_h', 'val_mse_w', 'val_mse_a',
-                     'MAPE', 'MAPE_h', 'MAPE_w', 'MAPE_a',
-                     'elapsed_t'
-                     ]
     stats_df = pd.DataFrame(columns=column_header)
     stats_df.loc[0] = best_model_stats
     stats_df.to_csv(os.path.join(config.output_dir, "best_model_stats_test.csv"), index=False)
 
+    # save model activation
+    # torch.save(val_activation_history, os.path.join(config.output_dir, "best_model_activation_test.pth"))
+
+    # save attention map
+    # if config.enable_save_attention:
+    #     torch.save(val_attention_map_history, os.path.join(config.output_dir, "best_model_attn_map_test.pth"))
+    #     if config.model == 'CSAXG':
+    #         torch.save(val_attention_gamma_hisotry, os.path.join(config.output_dir, "best_model_attn_gamma_test.pth"))
+
     # save results
-    val_y_pred_history = val_y_pred_history.reshape(-1, config.output_size)
-    val_y_true_history = val_y_true_history.reshape(-1, config.output_size)
-    val_y_original_history = val_y_original_history.reshape(-1, config.output_size)
-
-    val_y_pred_inverse_history = torch.zeros_like(val_y_pred_history)
-    for i in range(config.output_size):
-        val_y_pred_inverse_history[:, i] = val_y_pred_history[:, i] * config.data_train_std[i] + config.data_train_mean[i]
-
-    val_y_true_inverse_history = torch.zeros_like(val_y_true_history)
-    for i in range(config.output_size):
-        val_y_true_inverse_history[:, i] = val_y_true_history[:, i] * config.data_train_std[i] + config.data_train_mean[i]
-
-    val_y_ape_history = torch.abs((val_y_pred_inverse_history - val_y_true_inverse_history) / val_y_true_inverse_history * 100)
-    val_y_ape_history_mean = torch.mean(val_y_ape_history, dim=1, keepdim=True)
-
-    val_p_history = val_p_history.reshape(val_batch_size * len(data_loader), -1)
-
-    val_results = torch.cat((val_y_pred_history, val_y_true_history,
-                             val_y_pred_inverse_history, val_y_true_inverse_history,
-                             val_y_original_history,
-                             val_y_ape_history, val_y_ape_history_mean,
-                             val_p_history,
-                             ), dim=1)
-    column_header = ['pred_h', 'pred_w', 'pred_a', 'true_h', 'true_w', 'true_a']
-    column_header += ['pred_h_inverse', 'pred_w_inverse', 'pred_a_inverse',
-                      'true_h_inverse', 'true_w_inverse', 'true_a_inverse']
-    column_header += ['true_h_origin', 'true_w_origin', 'true_a_origin']
-    column_header += ['ape_h', 'ape_w', 'ape_a', 'ape_all']
-    column_header += [f"p{i//config.param_size}_{i%config.param_size}" for i in range(config.n_seq_total * config.param_size)]
+    val_results = torch.cat((val_raw_data_history,
+                             val_y_pred_history, val_y_true_history,
+                             val_y_iou), dim=1)
+    column_header = excel_headers
+    column_header += [f"y_pred_{i+1}" for i in range(config.output_size)]
+    column_header += [f"y_true_{i+1}" for i in range(config.output_size)]
+    column_header += [f"y_iou"]
     stats_df = pd.DataFrame(val_results.numpy(), columns=column_header)
     stats_df.to_csv(os.path.join(config.output_dir, "best_model_results_test.csv"), index=False)
 
 
 if __name__ == '__main__':
     if DEPLOY_ON:  # deploy mode on
-        # for model in ['CF1X', 'CF2X', 'CSAX', 'CBLX']:
-        for model in ['CF1XG', 'CF2XG', 'CF1XGG', 'CF2XGG', 'CSAXG', 'CBLXG']:
+        for model in ['STEN-GP']:
             dataset_dir = r'C:\mydata\dataset\proj_melt_pool_pred\20240625_single_line'
 
             # model_dir = r'C:\mydata\output\proj_melt_pool_pred\test12_0'
@@ -261,23 +198,11 @@ if __name__ == '__main__':
             delopy_trained_model(dataset_dir=dataset_dir, model_dir=model_dir, output_dir=output_dir)
 
     else:  # Test Mode On
-        root_dir = r'C:\mydata\output\proj_melt_pool_pred\test14_null'
-        # root_dir = r'C:\mydata\output\proj_melt_pool_pred\test14_0'
-        root_dir = r'C:\mydata\output\proj_melt_pool_pred\test14_h50'
-        # root_dir = r'C:\mydata\output\proj_melt_pool_pred\test14_h50_no_dropout'
-        # root_dir = r'C:\mydata\output\proj_melt_pool_pred\test14_h50_no_norm'
-        # root_dir = r'C:\mydata\output\proj_melt_pool_pred\test14_h50_no_gamma'
-
-        # root_dir = r'C:\mydata\output\proj_melt_pool_pred\test14_comp_test'
-
+        root_dir = r'C:\mydata\output\p2_ded_bead_profile\v0.0'
         print(f"root_dir: {root_dir}")
         file_list = [entry.name for entry in os.scandir(root_dir)
                      if entry.is_dir()
-                     and entry.name.startswith('clean')
-                     # and get_interval(entry.name) == 24
-                     # and get_sample_num(entry.name) == 300
-                     # and get_model_name(entry.name).endswith('Null')
-                     # and (entry.name.split(' ')[1] == 'CF1XGG' or entry.name.split(' ')[1] == 'CF2XGG')
+                     and entry.name.endswith('new_mask')
                      ]
         print(f"> number of sub dir: {len(file_list)}")
         for i_file, file_name in enumerate(file_list):

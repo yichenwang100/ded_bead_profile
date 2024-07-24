@@ -2,63 +2,84 @@
 # This file contains the default configuration
 
 # Global setting
-config_path: "config.yaml"
+config_path: 'config.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\proj_ded_bead_profile\test0'
-enable_task_name: True
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v0.0'
+enable_uuid_naming: True # if false, use customized naming
+extra_name: 'hyper_tune.ratio_0.5.lr_2e-5.iou.new_mask'
 enable_computational_test: False
 
 # Data
-dataset_dir: 'C:\mydata\dataset\proj_ded_bead_profile\20240619'
-dataset_name: 'some_dataset'
-enable_iterate_dataset: False # iterate for all sub datasets in the dataset_dir
-enable_light_dataset: True  # use pre-processed and compressed data
-enable_clean_data_only: True
-enable_standardization: True
+dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240722'
+dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init
+raw_data_size: 121
+enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
+dataset_iterate_ratio: 0.5 # use only portion of the dataset
 train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 16
 num_workers: 0  # no need to set if all data in GPU
+## Sequence length
+n_seq_before: 100
+n_seq_after: 99
+n_seq_total: 200
+n_seq_stride: 2
+## Img
+enable_resnet_preprocess: True
+img_crop_pixel: 350   # cropped from 480x440
+img_input_size: 224   # resized the cropped img
+img_start_idx: 0    # shift in starting index
+## Param and positional
+param_start_idx: 2
+param_size: 11   # number of expr. parameters
+pos_start_idx: 0
+pos_size: 15 # time, position, distance
+## Output
+enable_standardization: False # not supported
+output_start_index: 13
+output_size: 40
 
 # Model
-model: "CSAX"  # None
-enable_iterate_model: False # iterate for all models
-param_size: 11   # number of expr. parameters
-n_seq_total: 5
-n_seq_before: 2
-n_seq_after: 2
-img_colors: 3
-img_size: 150
-resnet_fc_size: 512
-enable_resnet_in_model: False
+model: "STEN-GP"  # None
+## embedding
+enable_img_embed: True
+enable_param_embed: True
+enable_pos_embed: True
+img_embed_dim: 512    # number of conv. features
+param_embed_dim: 8
+pos_embed_dim: 8
+embed_dim: 720
+## encoder
+encoder_layer_size: 3
+encoder_dim: 50   # ?? not used ?? H_c
+encoder_num_heads: 4
 enable_residual_gamma: True
 enable_layer_norm: True
 enable_dropout: True
 dropout: 0.2
-lstm_layer_num: 1
-fc_hidden_size: 80 # 20, 40, 80, 160
-output_size: 3
+## decoder
+output_option: 'Profile40' #'WHA', 'W4HA',
 
 # Training
 num_epochs: 80
-lr: 5.0e-4  # learning rate
+lr: 2.0e-5  # learning rate
 enable_weight_decay: False
-wd: 0  # weight decay
+wd: 1.0e-5  # weight decay
 enable_adaptive_lr: True
-lr_gamma: 0.95  # lr reduction factor for each epoch
+lr_gamma: 0.985  # lr reduction factor for each epoch
 early_stop: False
+profile_eps: 5.0e-3 # the noise level, below which prediction is not effective
 
 # Checkpoint
-checkpoint_dir: "./"
+checkpoint_dir: './'
 enable_save_best_model: True
 
 # Log
-log_dir: "logs/"
+log_dir: 'logs/'
 enable_tensorboard: True
 enable_save_history_stats_to_csv: True
 enable_save_activation: False
 enable_save_attention: False
-enable_save_lstm_hidden: False
 
