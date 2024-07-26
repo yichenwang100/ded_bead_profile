@@ -113,6 +113,7 @@ def validate(config, model, criterion, dataset, data_loader):
     val_y_true_history = torch.zeros((len(data_loader), config.output_size))    # batch size = 1
     val_y_pred_history = torch.zeros_like(val_y_true_history)
     val_y_iou = torch.zeros((len(data_loader), 1))
+    output_noise_cutoff = config.output_noise_cutoff
 
     # val_activation_history = torch.zeros((val_batch_size, len(data_loader),
     #                                       config.n_seq_total * config.embed_dim))
@@ -133,7 +134,7 @@ def validate(config, model, criterion, dataset, data_loader):
 
             raw_data = dataset.get_raw_data(index.cpu().item()).cpu()
             val_raw_data_history[i, :] = raw_data[:-1] # get rid of the right most column for mask
-            val_y_iou[i, 0] = compute_iou(y_pred, y).mean().cpu().item()
+            val_y_iou[i, 0] = compute_iou(y_pred, y, output_noise_cutoff).mean().cpu().item()
 
             # if config.enable_save_activation:
             #     val_activation_history[ i, :] = model.final.activation.detach()

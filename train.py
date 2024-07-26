@@ -46,6 +46,7 @@ def train(config):
     best_model_stats = None
     best_model_wts = None
     progress_bar = tqdm(range(num_epochs), ncols=110)
+    output_noise_cutoff = config.output_noise_cutoff
     train_print_step = 0
     val_print_step = 0
     t_start = time.time()
@@ -61,7 +62,7 @@ def train(config):
             y_pred = model(x_img, x_param, x_pos)
             loss = criterion(y_pred, y)
             train_loss_sum += loss.cpu().item()
-            train_iou_sum += compute_iou(y_pred, y).mean().cpu().item()
+            train_iou_sum += compute_iou(y_pred, y, output_noise_cutoff).mean().cpu().item()
 
             # Backward and Optimization
             optimizer.zero_grad()
@@ -74,10 +75,10 @@ def train(config):
                 temp_train_iou = train_iou_sum / (i + 1)
                 t_elapsed = (time.time() - t_train_start) / 60  # min
                 progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
-                                             f"| train [{i}]/{train_len}"
+                                             f"| train {i}/{train_len}"
                                              f", L:{temp_train_loss:.4f}"
-                                             f", iou:{temp_train_iou:.4f}"
-                                             f", t:[{t_elapsed:.1f}]/{t_elapsed / (i + 1) * train_len:.1f}min"
+                                             f", iou:{temp_train_iou:.3f}"
+                                             f", t:{t_elapsed:.1f}/{t_elapsed / (i + 1) * train_len:.1f}m"
                                              f"\t|")
 
                 if config.enable_tensorboard:
@@ -106,7 +107,7 @@ def train(config):
 
                 loss = criterion(y_pred, y)
                 val_loss_sum += loss.cpu().item()
-                val_iou_sum += compute_iou(y_pred, y).mean().cpu().item()
+                val_iou_sum += compute_iou(y_pred, y, output_noise_cutoff).mean().cpu().item()
 
                 # Print
                 if i % (val_len // 19) == 0:
@@ -114,10 +115,10 @@ def train(config):
                     temp_val_iou = val_iou_sum / (i + 1)
                     t_elapsed = (time.time() - t_val_start) / 60  # min
                     progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
-                                                 f"| val [{i}]/{val_len}"
+                                                 f"| val {i}/{val_len}"
                                                  f", L:{temp_val_loss:.4f}"
-                                                 f", iou:{temp_val_iou:.4f}"
-                                                 f", t:[{t_elapsed:.1f}]/{t_elapsed / (i + 1) * val_len:.1f}min"
+                                                 f", iou:{temp_val_iou:.3f}"
+                                                 f", t:{t_elapsed:.1f}/{t_elapsed / (i + 1) * val_len:.1f}m"
                                                  f"\t|")
 
                     if config.enable_tensorboard:

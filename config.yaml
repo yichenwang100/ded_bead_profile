@@ -7,9 +7,9 @@ enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v1.0'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v1.1'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'hyper_tune.ratio_0.7.lr_1.5e-5.b16-embed4-enclayer1'
+extra_name: 'v1.1.ratio_0.9.lr_4e-5.b16-embed6-enclayer1.cutoff_0.01'
 enable_computational_test: False
 
 # Data
@@ -17,7 +17,7 @@ dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240724'
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init
 raw_data_size: 121
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
-dataset_iterate_ratio: 0.7 # use only portion of the dataset
+dataset_iterate_ratio: 0.9 # use only portion of the dataset
 train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 16
 num_workers: 0  # no need to set if all data in GPU
@@ -40,17 +40,18 @@ pos_size: 15 # time, position, distance
 enable_standardization: False # not supported
 output_start_index: 13
 output_size: 40
+output_noise_cutoff: 0.01
 
 # Model
 model: "STEN-GP"  # None
 ## embedding
-enable_img_embed: True
-enable_param_embed: True
-enable_pos_embed: True
+enable_img_embed: True   # --- ABLATION
+enable_param_embed: True  # --- ABLATION
+enable_pos_embed: True  # --- ABLATION
 img_embed_dim: 512    # number of conv. features
 param_embed_dim: 4
 pos_embed_dim: 4
-embed_dim: 616
+embed_dim: 616  #616-4, 668-6, 720-8
 ## encoder
 encoder_layer_size: 1
 encoder_num_heads: 4
@@ -62,9 +63,9 @@ dropout: 0.2
 output_option: 'Profile40' #'WHA', 'W4HA',
 
 # Training
-num_epochs: 60
+num_epochs: 80
 optimizer_option: 'adam' # adam
-lr: 2.0e-5  # learning rate
+lr: 4.0e-5  # learning rate
 enable_weight_decay: False
 wd: 1.0e-5  # weight decay
 enable_adaptive_lr: True

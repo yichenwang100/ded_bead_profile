@@ -184,7 +184,7 @@ def compute_ape(y_pred, y_true, eps=1e-6):
     return torch.nanmean(ape)
 
 
-def compute_iou(y_pred, y_true):
+def compute_iou(y_pred, y_true, noise_cutoff=0):
     """
     Calculate an IoU-like metric for scalar values representing the intersection of the area
     under the predicted and true curves divided by the total area under the true curve.
@@ -198,6 +198,10 @@ def compute_iou(y_pred, y_true):
     """
     # Ensure the input tensors are of the correct shape
     assert y_pred.shape == y_true.shape
+
+    # cutoff noise value
+    y_pred[y_pred < noise_cutoff] = 0
+    y_true[y_true < noise_cutoff] = 0
 
     # Calculate the total area under the y_true curve using the trapezoidal rule
     total_area_true = torch.trapz(y_true.abs(), dim=1)

@@ -4,20 +4,6 @@ import torch.nn.functional as F
 from torchvision.models import resnet18
 from util import *
 
-# class LayerBiLstm(nn.Module):
-#     def __init__(self, config):
-#         super().__init__()
-#
-#         self.H = config.embed_dim
-#         self.lstm = nn.LSTM(input_size=self.H,
-#                             hidden_size=self.H // 2,
-#                             num_layers=config.lstm_layer_num,
-#                             bidirectional=True,
-#                             batch_first=True)
-#
-#     def forward(self, x):  # x: (B, N, H)
-#         return self.lstm(x, hx=None)[0]  # (B, N, H)
-
 
 class MyEmbedding(nn.Module):
     def __init__(self, config):
@@ -247,7 +233,7 @@ if __name__ == '__main__':
     ''' I/O test '''
     model_names = ['STEN-GP']
     total_params_list_list = []
-    H_list = [4, 8, 16, 32]
+    H_list = [4, 6, 8, 16, 32]
     for H in H_list:
         ''' Design embedding size '''
         print(f"\n> config embedding design...")
