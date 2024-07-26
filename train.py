@@ -32,7 +32,7 @@ def train(config):
 
     # Create logger using pandas.dataframe and csv
     if config.enable_save_history_stats_to_csv:
-        column_header = ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_mape', 'val_mape', 'extra']
+        column_header = ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_iou', 'val_iou', 'extra']
         history_stats_df = pd.DataFrame(columns=column_header)
 
     # Set up random seed
@@ -41,12 +41,11 @@ def train(config):
 
     # Training loop starts
     print('\n> Training Loop Starts...')
-    profile_eps = config.profile_eps
     num_epochs = config.num_epochs
     best_model_loss = float('inf')
     best_model_stats = None
     best_model_wts = None
-    progress_bar = tqdm(range(num_epochs), ncols=120)
+    progress_bar = tqdm(range(num_epochs), ncols=110)
     train_print_step = 0
     val_print_step = 0
     t_start = time.time()
@@ -83,10 +82,10 @@ def train(config):
 
                 if config.enable_tensorboard:
                     train_print_step += 1
-                    logger.add_scalars(main_tag="loss",
+                    logger.add_scalars(main_tag="step_loss",
                                        tag_scalar_dict={'train': temp_train_loss},
                                        global_step=train_print_step)
-                    logger.add_scalars(main_tag="iou",
+                    logger.add_scalars(main_tag="step_iou",
                                        tag_scalar_dict={'train': temp_train_iou},
                                        global_step=train_print_step)
 
@@ -123,10 +122,10 @@ def train(config):
 
                     if config.enable_tensorboard:
                         val_print_step += 1
-                        logger.add_scalars(main_tag="loss",
+                        logger.add_scalars(main_tag="step_loss",
                                            tag_scalar_dict={'val': temp_val_loss},
                                            global_step=val_print_step)
-                        logger.add_scalars(main_tag="iou",
+                        logger.add_scalars(main_tag="step_iou",
                                            tag_scalar_dict={'val': temp_val_iou},
                                            global_step=val_print_step)
 
@@ -153,36 +152,31 @@ def train(config):
                            extra_text]
             history_stats_df.loc[len(history_stats_df)] = epoch_stats
 
+            if epoch % config.checkpoint_epoch_interval == 0 or epoch == num_epochs - 1:
+                history_stats_df.to_csv(f"{config.log_dir}/train_val_stats.csv", index=False)
+
         if config.enable_save_best_model:
             if val_loss_mean < best_model_loss:
                 best_model_loss = val_loss_mean
-                best_model_stats = epoch_stats
                 best_model_wts = copy.deepcopy(model.state_dict())
+                best_model_stats = epoch_stats
+
+            if epoch % config.checkpoint_epoch_interval == 0 or epoch == num_epochs - 1:
+                # save model weights
+                torch.save(best_model_wts, f"{config.checkpoint_dir}/best_model_wts.pth")
+
+                # save stats
+                stats_df = pd.DataFrame(columns=column_header)
+                stats_df.loc[0] = best_model_stats
+                stats_df.to_csv(f"{config.checkpoint_dir}/best_model_stats.csv", index=False)
 
         # Adaptive learning rate
         if config.enable_adaptive_lr:
             scheduler.step()
 
-    ''' Save Results '''
     # Close the SummaryWriter
     if config.enable_tensorboard:
         logger.close()
-
-    # Write csv to file
-    if config.enable_save_history_stats_to_csv:
-        history_stats_df.to_csv(f"{config.log_dir}/train_val_stats.csv", index=False)
-
-    # Save best model result and params
-    if config.enable_save_best_model:
-        epoch = best_model_stats[0]
-
-        # save model weights and activation of last run
-        torch.save(best_model_wts, f"{config.checkpoint_dir}/best_model_wts.pth")
-
-        # save stats
-        stats_df = pd.DataFrame(columns=column_header)
-        stats_df.loc[0] = best_model_stats
-        stats_df.to_csv(f"{config.checkpoint_dir}/best_model_stats.csv", index=False)
 
 
 if __name__ == '__main__':

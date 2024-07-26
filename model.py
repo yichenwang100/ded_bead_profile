@@ -163,7 +163,7 @@ class MyDecoder(nn.Module):
         self.decoder = nn.Sequential(
             nn.Linear(config.embed_dim, config.embed_dim // 2),
             nn.ReLU(),
-            nn.Dropout() if config.enable_dropout else nn.Identity(),
+            nn.Dropout(config.dropout) if config.enable_dropout else nn.Identity(),
 
             nn.Linear(config.embed_dim // 2, config.embed_dim // 4),
             nn.ReLU(),
@@ -202,9 +202,14 @@ class OurModel(nn.Module):
 def get_model(config):
     model = OurModel(config).to(config.device)
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(),
-                                 lr=config.lr,
-                                 weight_decay=config.wd if config.enable_weight_decay else 0)
+    if config.optimizer_option == 'adamw':
+        optimizer = torch.optim.AdamW(model.parameters(),
+                                      lr=config.lr,
+                                      weight_decay=config.wd if config.enable_weight_decay else 0)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(),
+                                     lr=config.lr,
+                                     weight_decay=config.wd if config.enable_weight_decay else 0)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=config.lr_gamma)
     return model, criterion, optimizer, scheduler
 

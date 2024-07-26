@@ -7,17 +7,17 @@ enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v0.0'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v1.0'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'hyper_tune.ratio_0.5.lr_2e-5.iou.new_mask'
+extra_name: 'hyper_tune.ratio_0.7.lr_1.5e-5.b16-embed4-enclayer1'
 enable_computational_test: False
 
 # Data
-dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240722'
+dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240724'
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init
 raw_data_size: 121
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
-dataset_iterate_ratio: 0.5 # use only portion of the dataset
+dataset_iterate_ratio: 0.7 # use only portion of the dataset
 train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 16
 num_workers: 0  # no need to set if all data in GPU
@@ -48,12 +48,11 @@ enable_img_embed: True
 enable_param_embed: True
 enable_pos_embed: True
 img_embed_dim: 512    # number of conv. features
-param_embed_dim: 8
-pos_embed_dim: 8
-embed_dim: 720
+param_embed_dim: 4
+pos_embed_dim: 4
+embed_dim: 616
 ## encoder
-encoder_layer_size: 3
-encoder_dim: 50   # ?? not used ?? H_c
+encoder_layer_size: 1
 encoder_num_heads: 4
 enable_residual_gamma: True
 enable_layer_norm: True
@@ -63,18 +62,19 @@ dropout: 0.2
 output_option: 'Profile40' #'WHA', 'W4HA',
 
 # Training
-num_epochs: 80
+num_epochs: 60
+optimizer_option: 'adam' # adam
 lr: 2.0e-5  # learning rate
 enable_weight_decay: False
 wd: 1.0e-5  # weight decay
 enable_adaptive_lr: True
 lr_gamma: 0.985  # lr reduction factor for each epoch
 early_stop: False
-profile_eps: 5.0e-3 # the noise level, below which prediction is not effective
 
 # Checkpoint
 checkpoint_dir: './'
 enable_save_best_model: True
+checkpoint_epoch_interval: 20
 
 # Log
 log_dir: 'logs/'

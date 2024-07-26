@@ -56,7 +56,7 @@ class MyDataset(Dataset):
             raise RuntimeError("self.n_seq != self.n_seq_before + self.n_seq_after + 1")
 
         '''Mask invalid data'''
-        self.data_mask = data_tensor[self.n_seq_before:-self.n_seq_after, -1]     # last column is data mask for valid profiles
+        self.data_mask = data_tensor[self.n_seq_before:-self.n_seq_after, -1]   # last column: mask for valid profiles
         self.data_valid_index = self.data_mask.nonzero(as_tuple=True)[0]
         self.data_valid_index += self.n_seq_before
 
@@ -345,10 +345,10 @@ def pre_compress_all_img(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):
 #     plt.show()
 
 if __name__ == '__main__':
-    test_dataset()
+    # test_dataset()
 
-    excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data'
     img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240722'
+    excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240724'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240724'
     # create_dataset(os.path.join(excel_root_dir, 'High_const_sin_1.xlsx'), img_root_dir, output_dir)
-    # pre_compress_all_img(excel_root_dir, img_root_dir, output_dir, num_worker=3)
+    pre_compress_all_img(excel_root_dir, img_root_dir, output_dir, num_worker=1)

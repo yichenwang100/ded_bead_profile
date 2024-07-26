@@ -123,7 +123,7 @@ def setup_dir(config):
             else:
                 return short_uuid
 
-        task_name = f"{get_uuid(length=8)}"
+        task_name = f"{curr_time_str()}.{get_uuid(length=8)}"
 
     else:
         task_name = (f"{config.dataset_name}"
@@ -214,6 +214,17 @@ def time_to_HHMMSS(elapsed_time):
     hours, rem = divmod(int(elapsed_time), 3600)
     minutes, seconds = divmod(rem, 60)
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+
+from datetime import datetime
+def curr_time_str():
+    # Get the current date and time
+    now = datetime.now()
+
+    # Format the date and time as yymmdd-hhmmss
+    formatted_date_time = now.strftime("%y%m%d-%H%M%S")
+
+    return formatted_date_time
 
 
 def calculate_dataset_size(obj, print_size=False):

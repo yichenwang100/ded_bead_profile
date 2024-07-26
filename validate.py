@@ -10,7 +10,7 @@ from data import *
 
 ''' Dataset decomposition
 Data
- - Development
+ - Development  
     - Train
     - Val
     - Test
@@ -41,8 +41,8 @@ def test_trained_model(file_dir):
     best_model_path = os.path.join(file_dir, 'best_model_wts.pth')
     if not os.path.exists(best_model_path):
         print(f"! path {best_model_path} does not exist!")
-    #     return
-    # model.load_state_dict(torch.load(best_model_path))
+        return
+    model.load_state_dict(torch.load(best_model_path))
 
     # Move the model to the appropriate device
     model = model.to(config.device)
