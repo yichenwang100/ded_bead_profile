@@ -200,14 +200,16 @@ def compute_iou(y_pred, y_true, noise_cutoff=0):
     assert y_pred.shape == y_true.shape
 
     # cutoff noise value
-    y_pred[y_pred < noise_cutoff] = 0
-    y_true[y_true < noise_cutoff] = 0
+    y_pred_temp = y_pred.clone()
+    y_true_temp = y_true.clone()
+    y_pred_temp[y_pred_temp < noise_cutoff] = 0
+    y_true_temp[y_true_temp < noise_cutoff] = 0
 
     # Calculate the total area under the y_true curve using the trapezoidal rule
-    total_area_true = torch.trapz(y_true.abs(), dim=1)
+    total_area_true = torch.trapz(y_true_temp.abs(), dim=1)
 
     # Calculate the intersection area
-    min_values = torch.min(y_true.abs(), y_pred.abs())
+    min_values = torch.min(y_true_temp.abs(), y_pred_temp.abs())
     intersection_area = torch.trapz(min_values, dim=1)
 
     # Compute the IoU-like metric
