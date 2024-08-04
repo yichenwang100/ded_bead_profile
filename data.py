@@ -55,12 +55,22 @@ class MyDataset(Dataset):
         if self.n_seq != self.n_seq_before + self.n_seq_after + 1:
             raise RuntimeError("self.n_seq != self.n_seq_before + self.n_seq_after + 1")
 
-        '''Mask invalid data'''
-        self.data_mask = data_tensor[self.n_seq_before:-self.n_seq_after, -1]   # last column: mask for valid profiles
-        self.data_valid_index = self.data_mask.nonzero(as_tuple=True)[0]
-        self.data_valid_index += self.n_seq_before
+        '''Mask data'''
+        # last column: mask for valid profiles
+        valid_data_mask = data_tensor[self.n_seq_before:-self.n_seq_after, -1].to(config.device) > 0
 
-        self.data_len = len(self.data_valid_index)
+        # RTCP on/off, separate to check its effects
+        rtcp_mask = self.data_param[self.n_seq_before:-self.n_seq_after, 4] > 0
+        if 'enable_rtcp' in config and config.enable_rtcp == 'on_only':
+            data_mask = valid_data_mask & rtcp_mask
+        elif 'enable_rtcp' in config and config.enable_rtcp == 'off_only':
+            data_mask = valid_data_mask & ~rtcp_mask
+        else:
+            data_mask = valid_data_mask
+
+        self.data_index = data_mask.nonzero().squeeze()
+        self.data_index += self.n_seq_before
+        self.data_len = len(self.data_index)
 
         ''' Use stride for sub-sampling '''
         self.sys_sampling_interval = config.sys_sampling_interval
@@ -71,7 +81,7 @@ class MyDataset(Dataset):
 
     def __getitem__(self, index):
         index = index * self.sys_sampling_interval
-        idx_center = self.data_valid_index[index]
+        idx_center = self.data_index[index]
         idx_lf = idx_center - self.n_seq_before
         idx_rt = idx_center + self.n_seq_after + 1
         return (index,
@@ -82,7 +92,7 @@ class MyDataset(Dataset):
 
     def get_raw_data(self, index):
         index = index * self.sys_sampling_interval
-        idx_center = self.data_valid_index[index]
+        idx_center = self.data_index[index]
         return self.data_tensor[idx_center, self.param_index_lf:]
 
 

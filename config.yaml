@@ -9,19 +9,21 @@ enable_gpu: True
 enable_rewrite_output_dir: True
 output_dir: 'C:\mydata\output\p2_ded_bead_profile\v2.0'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed4.sampling_8.lr_1e-4adap0.96'
+extra_name: 'ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96.rtcp_on'
 enable_computational_test: False
 
 # Data
 dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
-dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init
+dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
 dataset_iterate_ratio: 1.0 # use only portion of the dataset
-dataset_exclude: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt']
+dataset_exclude: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt'] # used when enable_deploy_dataset == True
 enable_deploy_dataset: False
 train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 16
 num_workers: 0  # no need to set if all data in GPU
+## special filter
+enable_rtcp: 'on_only' # 'on_only', 'off_only' 'both'
 ## Sequence length
 n_seq_before: 100
 n_seq_after: 99
@@ -57,9 +59,9 @@ enable_param_embed_resize: True  # --- ABLATION
 enable_pos_embed_resize: True  # --- ABLATION
 feature_embed_option: 'default' # 'fc', 'default'
 img_embed_dim: 512    # number of conv. features
-param_embed_dim: 4
-pos_embed_dim: 4
-embed_dim: 616  #616-4, 668-6, 720-8
+param_embed_dim: 6
+pos_embed_dim: 6
+embed_dim: 668  #616-4, 668-6, 720-8
 ## encoder
 encoder_layer_size: 1   # --- ABLATION
 encoder_num_heads: 4
