@@ -135,11 +135,11 @@ def train(config):
         val_iou_mean = val_iou_sum / val_len
 
         if config.enable_tensorboard:
-            logger.add_scalars(main_tag="ep_loss",
+            logger.add_scalars(main_tag="epoch_loss",
                                tag_scalar_dict={'train': train_loss_mean,
                                                 'val': val_loss_mean},
                                global_step=epoch)
-            logger.add_scalars(main_tag="ep_iou",
+            logger.add_scalars(main_tag="epoch_iou",
                                tag_scalar_dict={'train': train_iou_mean,
                                                 'val': val_iou_mean},
                                global_step=epoch)
@@ -172,7 +172,7 @@ def train(config):
                 stats_df.to_csv(f"{config.checkpoint_dir}/best_model_stats.csv", index=False)
 
         # Adaptive learning rate
-        if config.enable_adaptive_lr:
+        if config.enable_adaptive_lr and epoch < config.lr_adaptive_max_epoch:
             scheduler.step()
 
     # Close the SummaryWriter
@@ -195,7 +195,6 @@ if __name__ == '__main__':
                 config_train.model = model
                 config_train.enable_tensorboard = False
                 config_train.enable_save_best_model = False
-                config_train.enable_save_activation = False
                 config_train.enable_save_attention = False
                 print('> embed_dim: ', config_train.embed_dim)
                 print('> target model: ', config_train.model)

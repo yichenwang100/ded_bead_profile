@@ -7,17 +7,18 @@ enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v1.1'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v2.0'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'ratio_0.95.lr_1.5e-4.b16-embed6-enclayer1.cutoff_0.01'
+extra_name: 'ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed4.sampling_8.lr_1e-4adap0.96'
 enable_computational_test: False
 
 # Data
-dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240724'
+dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init
-raw_data_size: 121
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
-dataset_iterate_ratio: 0.95 # use only portion of the dataset
+dataset_iterate_ratio: 1.0 # use only portion of the dataset
+dataset_exclude: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt']
+enable_deploy_dataset: False
 train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 16
 num_workers: 0  # no need to set if all data in GPU
@@ -25,37 +26,44 @@ num_workers: 0  # no need to set if all data in GPU
 n_seq_before: 100
 n_seq_after: 99
 n_seq_total: 200
-n_seq_stride: 2
-## Img
+sys_sampling_interval: 8  # systematic sampling interval
+raw_timestamp_interval: 2.5  # ms
+## Feature dimension
+raw_data_size: 121
+## Feature / Img
 enable_resnet_preprocess: True
 img_crop_pixel: 350   # cropped from 480x440
 img_input_size: 224   # resized the cropped img
 img_start_idx: 0    # shift in starting index
-## Param and positional
+## Feature / Parameter and positional
 param_start_idx: 2
 param_size: 11   # number of expr. parameters
 pos_start_idx: 0
 pos_size: 15 # time, position, distance
-## Output
+## Feature / Output
 enable_standardization: False # not supported
 output_start_index: 13
 output_size: 40
 output_noise_cutoff: 0.01
 
 # Model
-model: "STEN-GP"  # None
+model: "STEN_GP_FFD_TA"  # None, STEN_GP_FA_TA, STEN_GP_FFD, STEN_GP_TA_FFD, STEN_GP_FFD_TA, STEN_GP_FFD_BLSTM
 ## embedding
 enable_img_embed: True   # --- ABLATION
 enable_param_embed: True  # --- ABLATION
 enable_pos_embed: True  # --- ABLATION
+enable_img_embed_resize: False   # --- ABLATION
+enable_param_embed_resize: True  # --- ABLATION
+enable_pos_embed_resize: True  # --- ABLATION
+feature_embed_option: 'default' # 'fc', 'default'
 img_embed_dim: 512    # number of conv. features
-param_embed_dim: 6
-pos_embed_dim: 6
-embed_dim: 668  #616-4, 668-6, 720-8
+param_embed_dim: 4
+pos_embed_dim: 4
+embed_dim: 616  #616-4, 668-6, 720-8
 ## encoder
-encoder_layer_size: 1
+encoder_layer_size: 1   # --- ABLATION
 encoder_num_heads: 4
-enable_residual_gamma: True
+enable_residual_gamma: False   # --- ABLATION
 enable_layer_norm: True
 enable_dropout: True
 dropout: 0.2
@@ -63,13 +71,14 @@ dropout: 0.2
 output_option: 'Profile40' #'WHA', 'W4HA',
 
 # Training
-num_epochs: 80
+num_epochs: 60
 optimizer_option: 'adam' # adam
-lr: 1.5e-4  # learning rate
+lr: 1.0e-4  # learning rate 1.0e-4
 enable_weight_decay: False
 wd: 1.0e-5  # weight decay
 enable_adaptive_lr: True
-lr_gamma: 0.985  # lr reduction factor for each epoch
+lr_gamma: 0.96  # lr reduction factor for each epoch 0.985, 0.96
+lr_adaptive_max_epoch: 1000
 early_stop: False
 
 # Checkpoint
@@ -81,6 +90,6 @@ checkpoint_epoch_interval: 10
 log_dir: 'logs/'
 enable_tensorboard: True
 enable_save_history_stats_to_csv: True
-enable_save_activation: False
 enable_save_attention: False
+enable_save_residual: False
 

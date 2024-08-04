@@ -19,7 +19,7 @@ pip install pyyaml numpy pandas torch torchvision tensorboard tqdm
 ├── data.py     # to generate dataset and dataloader
 ├── model.py    # to define all NN models 
 ├── train.py    # to train, valid, and save logs + checkpoints
-├── validate.py     # to validate trained models
+├── test.py     # to testify trained models
 ├── multi_run.bat   # to run multi training cases at the same time
 ├── delay_run.bat   # to run the multi_run.bat with a time delay 
 └── README.md   # requirement and instructions
@@ -62,7 +62,7 @@ python delay_run.py
 
 To view training results on tensorboard (adjust path accordingly):
 ```shell
-tensorboard --logdir=C:\mydata\output\p2_ded_bead_profile\v1.1
+tensorboard --logdir=C:\mydata\output\p2_ded_bead_profile\v2.0
 ```
 
 To apply filters on tensorboard using regex
@@ -72,9 +72,10 @@ To apply filters on tensorboard using regex
 ^(?=.*ABC)(?=.*101)(?=.*loss_val).*
 ```
 
-## Validate
+
+## Test
 Check the result of trained model.
 ```shell
-python validate.py
+python test.py
 ```
 

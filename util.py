@@ -42,7 +42,7 @@ def load_config(config_path='config.yaml'):
 
 def str2bool(v):
     if isinstance(v, bool):
-       return v
+        return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
@@ -77,7 +77,7 @@ def get_config_from_cmd(parser):
                 add_arguments(parser, value, prefix + key + '.')
             else:
                 arg_type = type(value)
-                arg_type = str2bool if isinstance(value, bool) else type(value) # process bool type
+                arg_type = str2bool if isinstance(value, bool) else type(value)  # process bool type
                 parser.add_argument(f'--{prefix}{key}', type=arg_type, default=None, help=f'Default: {value}')
 
     # get the user input args
@@ -106,24 +106,27 @@ def setup_dir(config):
 
     if config.enable_uuid_naming:
         # get a shortened UUID
-        def get_uuid(length=-1):
-            import uuid, base64
-            # Generate a UUID
-            uuid_obj = uuid.uuid4()
+        # def get_uuid(length=-1):
+        #     import uuid, base64
+        #     # Generate a UUID
+        #     uuid_obj = uuid.uuid4()
+        #
+        #     # Convert UUID to bytes
+        #     uuid_bytes = uuid_obj.bytes
+        #
+        #     # Encode bytes to Base64
+        #     short_uuid = base64.urlsafe_b64encode(uuid_bytes).rstrip(b'=').decode('utf-8')
+        #
+        #     if length > 0:
+        #         return short_uuid[0:length]
+        #
+        #     else:
+        #         return short_uuid
 
-            # Convert UUID to bytes
-            uuid_bytes = uuid_obj.bytes
-
-            # Encode bytes to Base64
-            short_uuid = base64.urlsafe_b64encode(uuid_bytes).rstrip(b'=').decode('utf-8')
-
-            if length > 0:
-                return short_uuid[0:length]
-
-            else:
-                return short_uuid
-
-        task_name = f"{curr_time_str()}.{get_uuid(length=8)}"
+        # Get the high resolution performance counter of CPU
+        high_prec_time = time.perf_counter()
+        decimal_part = f"{high_prec_time - int(high_prec_time):.8f}".split('.')[1]
+        task_name = f"{curr_time_str()}.{decimal_part}"
 
     else:
         task_name = (f"{config.dataset_name}"
@@ -140,7 +143,6 @@ def setup_dir(config):
 
     task_name += f".{config.extra_name}" if config.extra_name is not None else ""
     config.output_dir = config.output_dir + '/' + task_name + '/'
-
 
     # remove the project dir if it exists
     if config.enable_rewrite_output_dir:
@@ -159,6 +161,7 @@ def setup_dir(config):
     config.checkpoint_dir = config.output_dir + config.checkpoint_dir
     os.makedirs(config.checkpoint_dir, exist_ok=True)
     print("> checkpoint_dir: ", os.path.abspath(config.checkpoint_dir))
+
 
 # backup the config to output folder
 def backup_config(config):
@@ -216,6 +219,7 @@ def compute_iou(y_pred, y_true, noise_cutoff=0):
     iou = intersection_area / total_area_true
     return iou
 
+
 def time_to_HHMMSS(elapsed_time):
     hours, rem = divmod(int(elapsed_time), 3600)
     minutes, seconds = divmod(rem, 60)
@@ -223,6 +227,8 @@ def time_to_HHMMSS(elapsed_time):
 
 
 from datetime import datetime
+
+
 def curr_time_str():
     # Get the current date and time
     now = datetime.now()
@@ -231,6 +237,17 @@ def curr_time_str():
     formatted_date_time = now.strftime("%y%m%d-%H%M%S")
 
     return formatted_date_time
+
+
+import inspect
+
+
+def function_name():
+    # Get the current frame
+    current_frame = inspect.currentframe()
+    # Get the calling frame
+    calling_frame = inspect.getouterframes(current_frame, 2)
+    return f"{calling_frame[1].function}"
 
 
 def calculate_dataset_size(obj, print_size=False):
@@ -246,18 +263,20 @@ def calculate_dataset_size(obj, print_size=False):
 
             # Print the attribute name and value
             if print_size:
-                print(f'{attr_name} has size {tensor_size/1e6} Mb')
+                print(f'{attr_name} has size {tensor_size / 1e6} Mb')
 
             total_size += tensor_size
 
     if print_size:
-        print(f"total size: {total_size/1e6} Mb")
+        print(f"total size: {total_size / 1e6} Mb")
     return total_size
+
 
 def get_tensor_size(tensor):
     if isinstance(tensor, torch.Tensor):
         return tensor.element_size() * tensor.nelement()
     return 0
+
 
 param_str_list = [
     "EXP_ID",
@@ -274,8 +293,11 @@ param_str_list = [
     "POWER_DIFF",
     "FEEDRATE_DIFF"
 ]
+
+
 def param_id_to_str(id):
     return param_str_list[id]
+
 
 pos_str_list = [
     "DISTANCE",
@@ -294,8 +316,11 @@ pos_str_list = [
     "ACC_Y",
     "ACC_C"
 ]
+
+
 def pos_id_to_str(id):
     return pos_str_list[id]
+
 
 excel_headers = [
     "EXP_ID", "POINT_ID",

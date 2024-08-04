@@ -63,14 +63,14 @@ class MyDataset(Dataset):
         self.data_len = len(self.data_valid_index)
 
         ''' Use stride for sub-sampling '''
-        self.n_seq_stride = config.n_seq_stride
-        self.data_len = self.data_len // self.n_seq_stride
+        self.sys_sampling_interval = config.sys_sampling_interval
+        self.data_len = self.data_len // self.sys_sampling_interval
 
     def __len__(self):
         return self.data_len
 
     def __getitem__(self, index):
-        index = index * self.n_seq_stride
+        index = index * self.sys_sampling_interval
         idx_center = self.data_valid_index[index]
         idx_lf = idx_center - self.n_seq_before
         idx_rt = idx_center + self.n_seq_after + 1
@@ -81,19 +81,25 @@ class MyDataset(Dataset):
                 self.data_y[idx_center])
 
     def get_raw_data(self, index):
-        index = index * self.n_seq_stride
+        index = index * self.sys_sampling_interval
         idx_center = self.data_valid_index[index]
         return self.data_tensor[idx_center, self.param_index_lf:]
 
 
 class MyCombinedDataset(Dataset):
     def __init__(self, config):
-        # iterate all dataset in the folder
-        file_list = [file for file in os.listdir(config.dataset_dir)
-                     if file.endswith('.pt')]
-
-        file_num = int(len(file_list) * config.dataset_iterate_ratio)
-        file_list = file_list[:file_num]
+        if not config.enable_deploy_dataset:
+            # iterate all dataset in the folder
+            file_list = [file for file in os.listdir(config.dataset_dir)
+                         if file.endswith('.pt')
+                         and file not in config.dataset_exclude]
+            file_num = int(len(file_list) * config.dataset_iterate_ratio)
+            file_list = file_list[:file_num]
+        else:
+            file_list = [file for file in os.listdir(config.dataset_dir)
+                         if file.endswith('.pt')
+                         and file in config.dataset_exclude]
+            file_num = len(file_list)
 
         self.dataset_num = file_num
         self.datasets = []
@@ -345,10 +351,10 @@ def pre_compress_all_img(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):
 #     plt.show()
 
 if __name__ == '__main__':
-    # test_dataset()
+    test_dataset()
 
     img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240724'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240724'
+    excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240730'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240730'
     # create_dataset(os.path.join(excel_root_dir, 'High_const_sin_1.xlsx'), img_root_dir, output_dir)
-    pre_compress_all_img(excel_root_dir, img_root_dir, output_dir, num_worker=1)
+    # pre_compress_all_img(excel_root_dir, img_root_dir, output_dir, num_worker=1)

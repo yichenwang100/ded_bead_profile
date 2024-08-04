@@ -3,6 +3,7 @@ report/
 temp/test_trivial.py
 temp/todo.md
 .idea/
+log/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

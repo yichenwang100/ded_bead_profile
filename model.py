@@ -11,19 +11,35 @@ class MyEmbedding(nn.Module):
         N = config.n_seq_total
         self.H_param = config.param_size
         self.H_pos = config.pos_size
-        self.param_embed = nn.ModuleList([nn.Linear(1, config.param_embed_dim) for _ in range(self.H_param)])
-        self.pos_embed = nn.ModuleList([nn.Linear(1, config.pos_embed_dim) for _ in range(self.H_pos)])
-        self.embed_dim = (config.img_embed_dim +
-                          config.param_embed_dim * config.param_size +
-                          config.pos_embed_dim * config.pos_size)
-        if self.embed_dim != config.embed_dim:
-            raise RuntimeError(f"self.embed_dim({self.embed_dim}) != config.embed_dim({config.embed_dim})")
+
+        self.enable_linear = False
+        if 'feature_embed_option' in config and config.feature_embed_option == 'fc':
+            self.param_weight = nn.Parameter(torch.randn(self.H_param, config.param_embed_dim))
+            self.param_bias = nn.Parameter(torch.randn(1, config.param_embed_dim))
+            self.pos_weight = nn.Parameter(torch.randn(self.H_pos, config.pos_embed_dim))
+            self.param_bias = nn.Parameter(torch.randn(1, config.pos_embed_dim))
+            self.enable_linear = True
+        else:
+            self.param_embed = nn.ModuleList([nn.Linear(1, config.param_embed_dim) for _ in range(self.H_param)])
+            self.pos_embed = nn.ModuleList([nn.Linear(1, config.pos_embed_dim) for _ in range(self.H_pos)])
+            self.embed_dim = (config.img_embed_dim +
+                              config.param_embed_dim * config.param_size +
+                              config.pos_embed_dim * config.pos_size)
+            if self.embed_dim != config.embed_dim:
+                raise RuntimeError(f"self.embed_dim({self.embed_dim}) != config.embed_dim({config.embed_dim})")
+
 
     def forward(self, x_img, x_param, x_pos):
-        B = x_img.size(0)
-        N = x_img.size(1)
-        x_param = torch.cat([self.param_embed[i](x_param[:, :, i].unsqueeze(-1)) for i in range(self.H_param)], dim=-1)
-        x_pos = torch.cat([self.pos_embed[i](x_pos[:, :, i].unsqueeze(-1)) for i in range(self.H_pos)], dim=-1)
+        if self.enable_linear:
+            x_param = x_param.expand(self.H_param, -1, -1, -1).permute(1, 2, 3, 0)
+            x_param = x_param.matmul(self.param_weight) + self.param_bias
+            x_param = x_param.view(x_img.size(0), x_img.size(1), -1)
+            x_pos = x_pos.expand(self.H_pos, -1, -1, -1).permute(1, 2, 3, 0)
+            x_pos = x_pos.matmul(self.pos_weight) + self.param_bias
+            x_pos = x_pos.view(x_img.size(0), x_img.size(1), -1)
+        else:
+            x_param = torch.cat([self.param_embed[i](x_param[:, :, i].unsqueeze(-1)) for i in range(self.H_param)], dim=-1)
+            x_pos = torch.cat([self.pos_embed[i](x_pos[:, :, i].unsqueeze(-1)) for i in range(self.H_pos)], dim=-1)
         x = torch.cat((x_img, x_param, x_pos), dim=2)
         return x  # (B, N, H_b)
 
@@ -42,16 +58,27 @@ class MyFeatureAttnBlock(nn.Module):
                                           dropout=config.dropout if config.enable_dropout else 0,
                                           batch_first=True)
 
+        # save attention
+        self.enable_save_attention = config.enable_save_attention
+        if self.enable_save_attention:
+            self.attn_map = None
+
+        # layer norm
         self.enable_layer_norm = config.enable_layer_norm
         if self.enable_layer_norm:
             self.ln = nn.LayerNorm(config.n_seq_total)
 
     def forward(self, x):
         x = x.transpose(1, 2)
-        if self.enable_residual_gamma:
-            x = self.gamma * self.attn(x, x, x)[0] + x
+        if self.enable_save_attention:
+            attn_out, self.attn_map = self.attn(x, x, x, need_weights=True)
         else:
-            x = self.attn(x, x, x)[0]  # (B, N, H_c)
+            attn_out = self.attn(x, x, x, need_weights=False)[0]
+
+        if self.enable_residual_gamma:
+            x = self.gamma * attn_out + x
+        else:
+            x = x + attn_out  # (B, N, H_c)
 
         if self.enable_layer_norm:
             x = self.ln(x)
@@ -73,16 +100,52 @@ class MyTemporalAttnBlock(nn.Module):
                                           num_heads=config.encoder_num_heads,
                                           dropout=config.dropout if config.enable_dropout else 0,
                                           batch_first=True)
+        # save attention
+        self.enable_save_attention = config.enable_save_attention
+        if self.enable_save_attention:
+            self.attn_map = None
 
+        # layer norm
         self.enable_layer_norm = config.enable_layer_norm
         if self.enable_layer_norm:
             self.ln = nn.LayerNorm(config.embed_dim)
 
     def forward(self, x):
-        if self.enable_residual_gamma:
-            x = self.gamma * self.attn(x, x, x)[0] + x
+        if self.enable_save_attention:
+            attn_out, self.attn_map = self.attn(x, x, x, need_weights=True)
         else:
-            x = self.attn(x, x, x)[0]  # (B, N, H_c)
+            attn_out = self.attn(x, x, x, need_weights=False)[0]
+
+        if self.enable_residual_gamma:
+            x = self.gamma * attn_out + x
+        else:
+            x = x + attn_out  # (B, N, H_c)
+
+        if self.enable_layer_norm:
+            x = self.ln(x)
+
+        return x
+
+
+class MyBiLSTMBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        # temporal wise attn
+        self.lstm = nn.LSTM(input_size=config.embed_dim,
+                            hidden_size=config.embed_dim//2,
+                            num_layers=1,
+                            batch_first=True,
+                            bidirectional=True,
+                            )
+
+        # layer norm
+        self.enable_layer_norm = config.enable_layer_norm
+        if self.enable_layer_norm:
+            self.ln = nn.LayerNorm(config.embed_dim)
+
+    def forward(self, x):
+        x = self.lstm(x)[0]
 
         if self.enable_layer_norm:
             x = self.ln(x)
@@ -117,7 +180,7 @@ class MyFeedForwardBlock(nn.Module):
         if self.enable_residual_gamma:
             x = x + self.gamma * self.fc2(self.relu(self.fc1(x)))
         else:
-            x = self.fc2(self.relu(self.fc1(x)))
+            x = x + self.fc2(self.relu(self.fc1(x)))
 
         if self.enable_layer_norm:
             x = self.ln(x)
@@ -129,10 +192,30 @@ class MyEncoder(nn.Module):
         super().__init__()
 
         layers = []
-        for _ in range(config.encoder_layer_size):
-            layers.append(MyFeatureAttnBlock(config))
-            layers.append(MyTemporalAttnBlock(config))
-            layers.append(MyFeedForwardBlock(config))
+        if config.model == 'STEN_GP_FFD_BLSTM':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MyFeedForwardBlock(config))
+                layers.append(MyBiLSTMBlock(config))
+        elif config.model == 'STEN_GP_FFD_TA':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MyFeedForwardBlock(config))
+                layers.append(MyTemporalAttnBlock(config))
+        elif config.model == 'STEN_GP_TA_FFD':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MyTemporalAttnBlock(config))
+                layers.append(MyFeedForwardBlock(config))
+        elif config.model == 'STEN_GP_FA_TA':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MyFeatureAttnBlock(config))
+                layers.append(MyTemporalAttnBlock(config))
+        elif config.model == 'STEN_GP_FFD':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MyFeedForwardBlock(config))
+        else:   # default setup
+            for _ in range(config.encoder_layer_size):
+                layers.append(MyFeatureAttnBlock(config))
+                layers.append(MyTemporalAttnBlock(config))
+                layers.append(MyFeedForwardBlock(config))
 
         self.encoder = nn.Sequential(*layers)
 
@@ -157,16 +240,9 @@ class MyDecoder(nn.Module):
             nn.ReLU(),
         )
 
-        self.save_activation = config.enable_save_activation
-        self.activation = None  # record if each neuron is activated
-
     def forward(self, x):
         x = x[:, self.n_seq_before, :]
         x = self.decoder(x)
-
-        if self.save_activation:
-            self.activation = x
-
         return x
 
 
@@ -177,11 +253,32 @@ class OurModel(nn.Module):
         self.embedding = MyEmbedding(config)
         self.encoder = MyEncoder(config)
         self.decoder = MyDecoder(config)
+        self.timing_on = False
 
     def forward(self, x_img, x_param, x_pos):
-        x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
-        x = self.encoder(x)  # (B, N, H_c)
-        x = self.decoder(x)  # (B, N, output_size)
+        if self.timing_on:
+            time_count = 100
+
+            time_start = time.time()
+            for i in range(time_count):
+                x_embed = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
+            time_embed = time.time()
+
+            for i in range(time_count):
+                x_enc = self.encoder(x_embed)  # (B, N, H_c)
+            time_enc = time.time()
+
+            for i in range(time_count):
+                x = self.decoder(x_enc)  # (B, N, output_size)
+            time_dec = time.time()
+            print(f'> model timing: ')
+            print(f'time_embed_elapsed, {(time_embed - time_start)/time_count*1e6:.3f}us')
+            print(f'time_enc_elapsed, {(time_enc - time_embed)/time_count*1e6:.3f}us')
+            print(f'time_dec_elapsed, {(time_dec - time_enc)/time_count*1e6:.3f}us')
+        else:
+            x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
+            x = self.encoder(x)  # (B, N, H_c)
+            x = self.decoder(x)  # (B, N, output_size)
         return x
 
 
@@ -191,6 +288,11 @@ def get_model(config):
     if config.optimizer_option == 'adamw':
         optimizer = torch.optim.AdamW(model.parameters(),
                                       lr=config.lr,
+                                      weight_decay=config.wd if config.enable_weight_decay else 0)
+    elif config.optimizer_option == 'adam_opt1':
+        optimizer = torch.optim.AdamW(model.parameters(),
+                                      lr=config.lr,
+                                      betas=(0.9, 0.98),
                                       weight_decay=config.wd if config.enable_weight_decay else 0)
     else:
         optimizer = torch.optim.Adam(model.parameters(),
@@ -231,9 +333,10 @@ if __name__ == '__main__':
 
 
     ''' I/O test '''
-    model_names = ['STEN-GP']
+    model_names = ['STEN_GP_FFD_TA', 'STEN_GP_FFD_BLSTM']
     total_params_list_list = []
-    H_list = [4, 6, 8, 16, 32]
+    # H_list = [4, 6, 8]
+    H_list = [6]
     for H in H_list:
         ''' Design embedding size '''
         print(f"\n> config embedding design...")
@@ -275,13 +378,40 @@ if __name__ == '__main__':
             total_params_list.append(total_params)
             print('> model param size: ', total_params)
             print('> model neuron num: ', get_total_neuron_num(model))
+            model.timing_on = True  # print timing of each layer
             y = model(x_img, x_param, x_pos)
             print("> output shape", y.shape)
 
             from torchinfo import summary
+            model.timing_on = False
             summary(model, input_size=[x_img.shape, x_param.shape, x_pos.shape])
 
+            '''Profile the forward pass'''
+            import torch.profiler
+
+            num_iterations = 200
+            with torch.profiler.profile(
+                    activities=[
+                        torch.profiler.ProfilerActivity.CPU,
+                        torch.profiler.ProfilerActivity.CUDA,
+                    ],
+                    schedule=torch.profiler.schedule(wait=1, warmup=1, active=num_iterations),
+                    on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/my_embedding_profile'),
+                    record_shapes=True,
+                    profile_memory=True,
+                    with_stack=True
+            ) as prof:
+                time_start = time.time()
+                for _ in range(num_iterations):
+                    output = model.embedding(x_img, x_param, x_pos)
+                    prof.step()
+
+            print(f"total elapsed time: {(time.time() - time_start) * 1000:.3f}ms")
+            print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
+
         total_params_list_list.append(total_params_list)
+
+
 
     import re
     def format_number(number):
@@ -290,3 +420,5 @@ if __name__ == '__main__':
     for i_list, _param_list in enumerate(total_params_list_list):
         print(f"> Param list for H = {H_list[i_list]}: ",
               [format_number(num) for num in _param_list])
+
+
