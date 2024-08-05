@@ -5,6 +5,37 @@ from torchvision.models import resnet18
 from util import *
 
 
+class MyIoULoss(nn.Module):
+    def __init__(self, config, smooth=1e-6):
+        super().__init__()
+        # self.smooth = smooth
+        self.noise_cutoff = config.output_noise_cutoff
+
+    def forward(self, y_pred, y_true):
+        # preds = preds.view(-1)
+        # targets = targets.view(-1)
+        # intersection = (preds * targets).sum()
+        # union = preds.sum() + targets.sum() - intersection
+        # iou = (intersection + self.smooth) / (union + self.smooth)
+
+        iou = compute_iou(y_pred, y_true, noise_cutoff=self.noise_cutoff).mean()
+        return 1 - iou
+
+
+class MyCombinedLoss(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.mse_loss = nn.MSELoss()
+        self.mse_loss_lambda = config.criterion_mse_lambda
+        self.iou_loss = MyIoULoss(config)
+        self.iou_loss_lambda = config.criterion_iou_lambda
+
+    def forward(self, y_pred, y_true):
+        mse_loss = self.mse_loss(y_pred, y_true)
+        iou_loss = self.iou_loss(y_pred, y_true)
+        return (mse_loss * self.mse_loss_lambda + iou_loss * self.iou_loss_lambda)
+
+
 class MyEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -28,7 +59,6 @@ class MyEmbedding(nn.Module):
             if self.embed_dim != config.embed_dim:
                 raise RuntimeError(f"self.embed_dim({self.embed_dim}) != config.embed_dim({config.embed_dim})")
 
-
     def forward(self, x_img, x_param, x_pos):
         if self.enable_linear:
             x_param = x_param.expand(self.H_param, -1, -1, -1).permute(1, 2, 3, 0)
@@ -38,7 +68,8 @@ class MyEmbedding(nn.Module):
             x_pos = x_pos.matmul(self.pos_weight) + self.param_bias
             x_pos = x_pos.view(x_img.size(0), x_img.size(1), -1)
         else:
-            x_param = torch.cat([self.param_embed[i](x_param[:, :, i].unsqueeze(-1)) for i in range(self.H_param)], dim=-1)
+            x_param = torch.cat([self.param_embed[i](x_param[:, :, i].unsqueeze(-1)) for i in range(self.H_param)],
+                                dim=-1)
             x_pos = torch.cat([self.pos_embed[i](x_pos[:, :, i].unsqueeze(-1)) for i in range(self.H_pos)], dim=-1)
         x = torch.cat((x_img, x_param, x_pos), dim=2)
         return x  # (B, N, H_b)
@@ -133,7 +164,7 @@ class MyBiLSTMBlock(nn.Module):
 
         # temporal wise attn
         self.lstm = nn.LSTM(input_size=config.embed_dim,
-                            hidden_size=config.embed_dim//2,
+                            hidden_size=config.embed_dim // 2,
                             num_layers=1,
                             batch_first=True,
                             bidirectional=True,
@@ -211,7 +242,7 @@ class MyEncoder(nn.Module):
         elif config.model == 'STEN_GP_FFD':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config))
-        else:   # default setup
+        else:  # default setup
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeatureAttnBlock(config))
                 layers.append(MyTemporalAttnBlock(config))
@@ -272,9 +303,9 @@ class OurModel(nn.Module):
                 x = self.decoder(x_enc)  # (B, N, output_size)
             time_dec = time.time()
             print(f'> model timing: ')
-            print(f'time_embed_elapsed, {(time_embed - time_start)/time_count*1e6:.3f}us')
-            print(f'time_enc_elapsed, {(time_enc - time_embed)/time_count*1e6:.3f}us')
-            print(f'time_dec_elapsed, {(time_dec - time_enc)/time_count*1e6:.3f}us')
+            print(f'time_embed_elapsed, {(time_embed - time_start) / time_count * 1e6:.3f}us')
+            print(f'time_enc_elapsed, {(time_enc - time_embed) / time_count * 1e6:.3f}us')
+            print(f'time_dec_elapsed, {(time_dec - time_enc) / time_count * 1e6:.3f}us')
         else:
             x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
             x = self.encoder(x)  # (B, N, H_c)
@@ -284,7 +315,16 @@ class OurModel(nn.Module):
 
 def get_model(config):
     model = OurModel(config).to(config.device)
-    criterion = nn.MSELoss()
+
+    # criterion
+    if 'criterion_option' in config and config.criterion_option == 'iou':
+        criterion = MyIoULoss(config)
+    elif 'criterion_option' in config and config.criterion_option == 'mse_iou':
+        criterion = MyCombinedLoss(config)
+    else:
+        criterion = nn.MSELoss()
+
+    # optimizer
     if config.optimizer_option == 'adamw':
         optimizer = torch.optim.AdamW(model.parameters(),
                                       lr=config.lr,
@@ -304,6 +344,7 @@ def get_model(config):
 
 if __name__ == '__main__':
     config = load_config()
+
 
     def get_total_parameter_num(model):
         return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -383,6 +424,7 @@ if __name__ == '__main__':
             print("> output shape", y.shape)
 
             from torchinfo import summary
+
             model.timing_on = False
             summary(model, input_size=[x_img.shape, x_param.shape, x_pos.shape])
 
@@ -411,14 +453,13 @@ if __name__ == '__main__':
 
         total_params_list_list.append(total_params_list)
 
-
-
     import re
+
+
     def format_number(number):
         return re.sub(r'(?<!^)(?=(\d{3})+$)', ',', str(number))
+
 
     for i_list, _param_list in enumerate(total_params_list_list):
         print(f"> Param list for H = {H_list[i_list]}: ",
               [format_number(num) for num in _param_list])
-
-

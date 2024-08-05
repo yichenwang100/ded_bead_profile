@@ -5,8 +5,8 @@ import subprocess
 # 设置目标日期和时间
 target_datetime = datetime.datetime(year=2024,
                                     month=8,
-                                    day=4,
-                                    hour=4,
+                                    day=5,
+                                    hour=3,
                                     minute=0)
 
 def run_batch():

@@ -7,9 +7,9 @@ enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v2.0'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v3.0'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96.rtcp_on'
+extra_name: 'ffd_ta.embed6.sampling_8.lr_1e-5adap0.96.loss_mse_iou'
 enable_computational_test: False
 
 # Data
@@ -23,7 +23,7 @@ train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 16
 num_workers: 0  # no need to set if all data in GPU
 ## special filter
-enable_rtcp: 'on_only' # 'on_only', 'off_only' 'both'
+enable_rtcp: 'both' # 'on_only', 'off_only' 'both'
 ## Sequence length
 n_seq_before: 100
 n_seq_after: 99
@@ -73,14 +73,20 @@ dropout: 0.2
 output_option: 'Profile40' #'WHA', 'W4HA',
 
 # Training
+# criterion
+criterion_option: 'iou' # 'mse', 'iou', 'mse_iou'
+criterion_mse_lambda: 0.5
+criterion_iou_lambda: 0.5
+# optimizer
 num_epochs: 60
 optimizer_option: 'adam' # adam
-lr: 1.0e-4  # learning rate 1.0e-4
+lr: 1.0e-5  # learning rate 1.0e-4
 enable_weight_decay: False
 wd: 1.0e-5  # weight decay
 enable_adaptive_lr: True
 lr_gamma: 0.96  # lr reduction factor for each epoch 0.985, 0.96
 lr_adaptive_max_epoch: 1000
+# cross-validation
 early_stop: False
 
 # Checkpoint
