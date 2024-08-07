@@ -184,26 +184,36 @@ def testify(config, model, criterion, dataset, data_loader):
 
 
 if __name__ == '__main__':
-    DEPLOY_ON = True
+    # TEST_MODE = 'Test-Set'
+    TEST_MODE = 'Deploy'
+    # TEST_MODE = 'Test-Saliency'
 
-    if DEPLOY_ON:  # deploy mode on
-        # model_dir = r'C:\mydata\output\proj_melt_pool_pred\test12_0'
-        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
-        model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
-        model_dir = os.path.join(model_dir, model_name)
-
-        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'
-        output_dir = os.path.join(output_dir, model_name)
-        deploy_trained_model(model_dir=model_dir, output_dir=output_dir)
-
-    else:  # Test Mode On
-        root_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
+    if TEST_MODE == 'Test-Set':     # Test on the test dataset
+        root_dir = r'C:\mydata\output\p2_ded_bead_profile\v3.0'
         print(f"root_dir: {root_dir}")
         file_list = [entry.name for entry in os.scandir(root_dir)
                      if entry.is_dir()
-                     # and entry.name.startswith('240803-215833.')
+                     and entry.name.startswith('240805-235557.18450500')
                      ]
         print(f"> number of sub dir: {len(file_list)}")
         for i_file, file_name in enumerate(file_list):
             print(f"\n> file [{i_file}]/{len(file_list)}: {file_name}")
             test_trained_model(os.path.join(root_dir, file_name))
+
+    elif TEST_MODE == 'Deploy':  # deploy mode on
+        # model_dir = r'C:\mydata\output\proj_melt_pool_pred\test12_0'
+        # model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
+        # model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
+        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v3.2'
+        model_name = f"240806-171800.17812270.ffd_ta.embed6.sampling_2.lr_1e-4adap0.96.loss_iou_0.1.dropout_0.3"
+        model_dir = os.path.join(model_dir, model_name)
+
+        # output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'
+        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v3.2.d'
+        output_dir = os.path.join(output_dir, model_name)
+        deploy_trained_model(model_dir=model_dir, output_dir=output_dir)
+
+    else:
+        pass
+
+

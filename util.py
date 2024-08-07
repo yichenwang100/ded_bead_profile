@@ -187,10 +187,10 @@ def compute_ape(y_pred, y_true, eps=1e-6):
     return torch.nanmean(ape)
 
 
-def compute_iou(y_pred, y_true, noise_cutoff=0):
+def compute_iou(y_pred, y_true, noise_cutoff=0, eps=1e-6):
     """
     Calculate an IoU-like metric for scalar values representing the intersection of the area
-    under the predicted and true curves divided by the total area under the true curve.
+    under the predicted and true curves divided by the total area under the two curves.
 
     Parameters:
     y_true (torch.Tensor): Ground truth values, shape (batch_size, N).
@@ -203,20 +203,22 @@ def compute_iou(y_pred, y_true, noise_cutoff=0):
     assert y_pred.shape == y_true.shape
 
     # cutoff noise value
-    y_pred_temp = y_pred.clone()
-    y_true_temp = y_true.clone()
+    y_pred_temp = y_pred.clone().abs()
+    y_true_temp = y_true.clone().abs()
     y_pred_temp[y_pred_temp < noise_cutoff] = 0
     y_true_temp[y_true_temp < noise_cutoff] = 0
 
-    # Calculate the total area under the y_true curve using the trapezoidal rule
-    total_area_true = torch.trapz(y_true_temp.abs(), dim=1)
-
     # Calculate the intersection area
-    min_values = torch.min(y_true_temp.abs(), y_pred_temp.abs())
+    min_values = torch.min(y_true_temp, y_pred_temp)
     intersection_area = torch.trapz(min_values, dim=1)
 
-    # Compute the IoU-like metric
-    iou = intersection_area / total_area_true
+    # Calculate the total area under the y_true curve using the trapezoidal rule
+    total_area = (torch.trapz(y_true_temp, dim=1)
+                  + torch.trapz(y_pred_temp, dim=1)
+                  - intersection_area)
+
+    # Compute the IoU-like metric (eps is to avoid dividing by zero)
+    iou = (intersection_area + eps) / (total_area + eps)
     return iou
 
 

@@ -7,9 +7,9 @@ enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v3.0'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v3.2'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'ffd_ta.embed6.sampling_8.lr_1e-5adap0.96.loss_mse_iou'
+extra_name: 'ffd_ta.embed6.sampling_1.lr_5e-5adap0.985.loss_iou_0.12.dropout_0.3'
 enable_computational_test: False
 
 # Data
@@ -17,7 +17,7 @@ dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
 dataset_iterate_ratio: 1.0 # use only portion of the dataset
-dataset_exclude: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt'] # used when enable_deploy_dataset == True
+dataset_exclude: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt', 'Low_const_const_1_dataset.pt', 'Low_const_const_2_dataset.pt', 'High_sin_tooth_1_dataset.pt', 'High_sin_tooth_2_dataset.pt'] # used when enable_deploy_dataset == True
 enable_deploy_dataset: False
 train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 16
@@ -28,7 +28,7 @@ enable_rtcp: 'both' # 'on_only', 'off_only' 'both'
 n_seq_before: 100
 n_seq_after: 99
 n_seq_total: 200
-sys_sampling_interval: 8  # systematic sampling interval
+sys_sampling_interval: 1  # systematic sampling interval
 raw_timestamp_interval: 2.5  # ms
 ## Feature dimension
 raw_data_size: 121
@@ -68,23 +68,23 @@ encoder_num_heads: 4
 enable_residual_gamma: False   # --- ABLATION
 enable_layer_norm: True
 enable_dropout: True
-dropout: 0.2
+dropout: 0.3
 ## decoder
 output_option: 'Profile40' #'WHA', 'W4HA',
 
 # Training
 # criterion
-criterion_option: 'iou' # 'mse', 'iou', 'mse_iou'
-criterion_mse_lambda: 0.5
-criterion_iou_lambda: 0.5
+criterion_option: 'mse_iou' # 'mse', 'iou', 'mse_iou'
+criterion_mse_lambda: 0.88
+criterion_iou_lambda: 0.12
 # optimizer
 num_epochs: 60
 optimizer_option: 'adam' # adam
-lr: 1.0e-5  # learning rate 1.0e-4
+lr: 5.0e-5  # learning rate 1.0e-4
 enable_weight_decay: False
 wd: 1.0e-5  # weight decay
 enable_adaptive_lr: True
-lr_gamma: 0.96  # lr reduction factor for each epoch 0.985, 0.96
+lr_gamma: 0.985  # lr reduction factor for each epoch 0.985, 0.96
 lr_adaptive_max_epoch: 1000
 # cross-validation
 early_stop: False
