@@ -134,6 +134,12 @@ def train(config):
         val_loss_mean = val_loss_sum / val_len
         val_iou_mean = val_iou_sum / val_len
 
+        # ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_iou', 'val_iou', 'extra']
+        extra_text = f""
+        epoch_stats = [epoch, time.time() - t_start, lr,
+                       train_loss_mean, val_loss_mean, train_iou_mean, val_iou_mean,
+                       extra_text]
+
         if config.enable_tensorboard:
             logger.add_scalars(main_tag="epoch_loss",
                                tag_scalar_dict={'train': train_loss_mean,
@@ -146,11 +152,6 @@ def train(config):
 
         # Log
         if config.enable_save_history_stats_to_csv:
-            # ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_iou', 'val_iou', 'extra']
-            extra_text = f""
-            epoch_stats = [epoch, time.time() - t_start, lr,
-                           train_loss_mean, val_loss_mean, train_iou_mean, val_iou_mean,
-                           extra_text]
             history_stats_df.loc[len(history_stats_df)] = epoch_stats
 
             if epoch % config.checkpoint_epoch_interval == 0 or epoch == num_epochs - 1:

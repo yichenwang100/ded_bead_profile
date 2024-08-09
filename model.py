@@ -277,7 +277,7 @@ class MyDecoder(nn.Module):
         return x
 
 
-class OurModel(nn.Module):
+class MyModel(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -314,7 +314,7 @@ class OurModel(nn.Module):
 
 
 def get_model(config):
-    model = OurModel(config).to(config.device)
+    model = MyModel(config).to(config.device)
 
     # criterion
     if 'criterion_option' in config and config.criterion_option == 'iou':

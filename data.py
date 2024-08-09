@@ -13,6 +13,16 @@ import matplotlib.pyplot as plt
 
 from util import *
 
+''' 
+Dataset Decomposition (Total: M+N dataset)
+ - Development (M dataset)
+    - Train (80%)
+    - Val   (10%)
+    - Test  (10%)
+ - Deployment (N dataset)
+    - Deploy
+'''
+
 
 class MyDataset(Dataset):
 
@@ -57,10 +67,10 @@ class MyDataset(Dataset):
 
         '''Mask data'''
         # last column: mask for valid profiles
-        valid_data_mask = data_tensor[self.n_seq_before:-self.n_seq_after, -1].to(config.device) > 0
+        valid_data_mask = data_tensor[self.n_seq_before:-1 - self.n_seq_after, -1].to(config.device) > 0
 
         # RTCP on/off, separate to check its effects
-        rtcp_mask = self.data_param[self.n_seq_before:-self.n_seq_after, 4] > 0
+        rtcp_mask = self.data_param[self.n_seq_before:-1 - self.n_seq_after, 4] > 0
         if 'enable_rtcp' in config and config.enable_rtcp == 'on_only':
             data_mask = valid_data_mask & rtcp_mask
         elif 'enable_rtcp' in config and config.enable_rtcp == 'off_only':
@@ -201,7 +211,7 @@ def get_dataloaders(dataset, config, shuffle=True):
 def test_dataset():
     config = load_config()  # load default config
 
-    print('> Testing Dataset...')
+    print('\n> Testing Dataset...')
     print(f"> config.enable_iterate_dataset: [{config.enable_iterate_dataset}]")
     if config.enable_iterate_dataset:
         dataset = MyCombinedDataset(config)
@@ -212,21 +222,32 @@ def test_dataset():
 
     print('> dataset length:', dataset.__len__())
 
+    def print_data_item(data_item):
+        for i_elem, element in enumerate(data_item):
+            if isinstance(element, torch.Tensor):
+                print(f"> element[{i_elem}] Tensor: "
+                      f"  shape: {element.shape}, device: {element.device}"
+                      f"  \tmean: {element.float().mean().item():.6f}"
+                      f"  \tmax: {element.max().item():.6f}"
+                      f"  \tstd: {element.float().std().item():.6f}")
+            elif isinstance(element, (int, float)):
+                print(f"> element[{i_elem}] Int/Long/Float: "
+                      f"  value: {element}")
+
+    print('\n> Dataset first item:')
     data_item = dataset[0]
-    for element in data_item:
-        print(f"> element shape: {element.shape}, device: {element.device}")
+    print_data_item(data_item)
 
     print('\n> Testing Dataloader...')
     train_loader, val_loader, test_loader = get_dataloaders(dataset, config)
-    for data_item in train_loader:
-        break
-
     print(f"> train loader size: {len(train_loader)} ")
     print(f"> val loader size: {len(val_loader)} ")
     print(f"> test loader size: {len(test_loader)} ")
 
-    for element in data_item:
-        print(f"> element shape: {element.shape}, device: {element.device}")
+    print('\n> Train loader first item:')
+    for data_item in train_loader:
+        break
+    print_data_item(data_item)
 
 
 def create_dataset(xlsx_path, img_root_dir, output_dir):
@@ -331,7 +352,7 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
     print(f"> Dataset tensor saved at: {tensor_save_path} with size {dataset_tensor.size()}")
 
 
-def pre_compress_all_img(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):
+def create_all_dataset_in_parallel(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):
     dir_list = [os.path.join(xlsx_root_dir, entry.name) for entry in os.scandir(xlsx_root_dir)
                 if entry.is_file()
                 and entry.name.endswith('.xlsx')
@@ -343,28 +364,11 @@ def pre_compress_all_img(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):
             executor.submit(create_dataset, dir, img_root_dir, output_dir)
 
 
-# def plot_random_images(image_tensor, metadata_df, num_images=9):
-#     assert num_images <= image_tensor.shape[0], "Number of images to plot exceeds the number of available images"
-#
-#     indices = random.sample(range(image_tensor.shape[0]), num_images)
-#     images = image_tensor[indices]
-#
-#     fig, axes = plt.subplots(3, 3, figsize=(10, 10))
-#     axes = axes.flatten()
-#
-#     for img, ax, idx in zip(images, axes, indices):
-#         ax.imshow(img.squeeze(), cmap='gray')
-#         ax.set_title(f"Index: {idx}\nSec: {metadata_df.iloc[idx]['Second']} Ms: {metadata_df.iloc[idx]['Millisecond']}")
-#         ax.axis('off')
-#
-#     plt.tight_layout()
-#     plt.show()
-
 if __name__ == '__main__':
     test_dataset()
 
-    img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240730'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240730'
+    # img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
+    # excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240730'
+    # output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240730'
     # create_dataset(os.path.join(excel_root_dir, 'High_const_sin_1.xlsx'), img_root_dir, output_dir)
-    # pre_compress_all_img(excel_root_dir, img_root_dir, output_dir, num_worker=1)
+    # create_all_dataset_in_parallel(excel_root_dir, img_root_dir, output_dir, num_worker=1)
