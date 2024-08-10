@@ -193,13 +193,13 @@ def get_dataloaders(dataset, config, shuffle=True):
                               drop_last=True,
                               )
     val_loader = DataLoader(val_dataset,
-                            batch_size=1,
+                            batch_size=config.batch_size,
                             shuffle=False,
                             num_workers=config.num_workers,
                             drop_last=True,
                             )
     test_loader = DataLoader(test_dataset,
-                             batch_size=1,
+                             batch_size=config.batch_size,
                              shuffle=False,
                              num_workers=config.num_workers,
                              drop_last=True,

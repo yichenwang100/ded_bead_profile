@@ -92,16 +92,18 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test'):
     model.eval()
 
     ''' Test Starts '''
+    batch_size = config.batch_size
     len_loader = len(data_loader)
+    len_data = len_loader * batch_size
 
     val_loss_sum = 0.0
-    val_y_loss = torch.zeros((len_loader, 1))
+    val_y_loss = torch.zeros((len_data, 1))
 
     val_iou_sum = 0.0
-    val_y_iou = torch.zeros((len_loader, 1))
+    val_y_iou = torch.zeros((len_data, 1))
 
-    val_raw_data_history = torch.zeros((len_loader, config.raw_data_size))  # add a mask column
-    val_y_true_history = torch.zeros((len_loader, config.output_size))  # batch size = 1
+    val_raw_data_history = torch.zeros((len_data, config.raw_data_size))  # add a mask column
+    val_y_true_history = torch.zeros((len_data, config.output_size))  # batch size = 1
     val_y_pred_history = torch.zeros_like(val_y_true_history)
     output_noise_cutoff = config.output_noise_cutoff
 
@@ -123,11 +125,13 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test'):
             val_iou_sum += val_iou
             val_y_iou[i, 0] = val_iou
 
-            val_y_true_history[i, :] = y.cpu().detach().squeeze(0)
-            val_y_pred_history[i, :] = y_pred.cpu().detach().squeeze(0)
+            val_y_true_history[i*batch_size:(i+1)*batch_size, :] = y.cpu().detach()
+            val_y_pred_history[i*batch_size:(i+1)*batch_size, :] = y_pred.cpu().detach()
 
-            raw_data = dataset.get_raw_data(index.cpu().item()).cpu()
-            val_raw_data_history[i, :] = raw_data[:-1]  # get rid of the right most column for mask
+            for i_index, sub_index in enumerate(index):
+                raw_data = dataset.get_raw_data(sub_index).cpu()
+                # get rid of the right most column for mask
+                val_raw_data_history[i*batch_size + i_index] = raw_data[:-1]
 
             if config.enable_save_attention:
                 pass
@@ -175,7 +179,7 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test'):
 
 if __name__ == '__main__':
     TEST_MODE = 'test'
-    # TEST_MODE = 'deploy'
+    TEST_MODE = 'deploy'
     # TEST_MODE = 'test-Saliency'
 
     if TEST_MODE == 'test':  # Test on the test dataset
@@ -195,7 +199,7 @@ if __name__ == '__main__':
         # model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
         # model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
         model_dir = r'C:\mydata\output\p2_ded_bead_profile\v3.3'
-        model_name = f"240808-213529.29041980.ffd_ta.embed6.sampling_8.lr_1e-4adap0.985.loss_iou_0.12.dropout_0.3.n_seq_200.bi-lstm"
+        model_name = f"240810-020242.95447320.ffd_bilstm.embed6.sampling_1.lr_1.5e-4adap0.985.loss_iou_0.12.dropout_0.3.n_seq_200.batch_64"
         model_dir = os.path.join(model_dir, model_name)
 
         # output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'
