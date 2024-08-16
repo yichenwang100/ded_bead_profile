@@ -127,13 +127,11 @@ def train(config):
         val_iou_sum = 0.0
         t_val_start = time.time()
         with torch.no_grad():
-            # auto-regression:
-            y_temp = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
 
             for i_train, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
                 # auto-regression:
-                y_temp = torch.zeros((y.size(0), 1, y.size(2))).to(config.device)
+                y_temp = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
                 loss_temp_sum = 0
                 iou_temp_sum = 0
                 for i_dec in range(config.n_seq_dec_pool):
