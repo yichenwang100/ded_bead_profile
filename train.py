@@ -73,15 +73,26 @@ def train(config):
                                x_param[:, i_dec:i_dec+n_seq_enc_total, :],
                                x_pos[:, i_dec:i_dec+n_seq_enc_total, :],
                                y_temp)
+
+                y_true = y[:, i_dec+n_seq_enc_look_back, :]
+
+                # use mixed labels of true and pred
+                def is_using_true_label(i_epoch):
+                    return (torch.rand(1) < (1 - i_epoch * config.mixed_ratio_drop_per_epoch)).item()
+
+                if 'enable_mixed_label' in config and config.enable_mixed_label:
+                    y_new = y_true if is_using_true_label(epoch) else y_pred
+                else:
+                    y_new = y_pred
+
                 # Shift elements left and insert the new prediction at the end
                 if y_temp.size(1) <= n_seq_enc_look_back:
-                    y_temp = torch.cat((y_temp, y_pred.unsqueeze(1)), dim=1).detach()
+                    y_temp = torch.cat((y_temp, y_new.unsqueeze(1)), dim=1).detach()
                 else:
-                    y_temp = torch.cat((y_temp[:, :-1, :], y_pred.unsqueeze(1)), dim=1).detach()
+                    y_temp = torch.cat((y_temp[:, :-1, :], y_new.unsqueeze(1)), dim=1).detach()
 
 
                 # Criterion
-                y_true = y[:, i_dec+n_seq_enc_look_back, :]
                 loss = criterion(y_pred, y_true)
                 loss_temp_sum += loss.cpu().item()
                 iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean()

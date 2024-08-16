@@ -6,10 +6,11 @@ config_path: 'config.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
+cuda_index: 0
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v4.1'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v4.2'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'sample_100.enc_200.dec_100.pool_200.batch_128.ffd_bilstm.embed_6.lr_1.2e-4_0.985.wd_1e-4.mse_iou'
+extra_name: 'sample_100.enc_200.dec_100.pool_200.batch_128.mixed_ep_0.05.ffd_bilstm.embed_6.lr_1.2e-4_0.985.wd_1e-4.mse_iou'
 enable_computational_test: False
 
 # Data
@@ -79,6 +80,9 @@ output_option: 'Profile40' #'WHA', 'W4HA',
 output_embed_dim: 6
 
 # Training
+# mixed label
+enable_mixed_label: True
+mixed_ratio_drop_per_epoch: 0.05
 # criterion
 criterion_option: 'mae_mse_iou' # 'mse', 'iou', 'mse_iou', 'mae_mse_iou'
 criterion_mae_lambda: 0.0

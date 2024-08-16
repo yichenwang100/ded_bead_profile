@@ -169,7 +169,14 @@ def load_config(config_path='config.yaml'):
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
         config = AttributeDict(config)
-        config.device = torch.device("cuda" if config.enable_gpu and torch.cuda.is_available() else "cpu")
+        if config.enable_gpu and torch.cuda.is_available():
+            if 'cuda_index' in config:
+                dev_name = f"cuda:{config.cuda_index}"
+            else:
+                dev_name = f"cuda"
+        else:
+            dev_name = "cpu"
+        config.device = torch.device(dev_name)
     return config
 
 
