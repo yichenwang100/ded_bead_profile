@@ -372,6 +372,11 @@ class MyModel(nn.Module):
 
 def get_model(config):
     model = MyModel(config).to(config.device)
+
+    # auto parallel in multiple gpu
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
+
     if 'enable_param_init' in config and config.enable_param_init:
         model.apply(init_model_weights)
 
