@@ -63,16 +63,22 @@ def train(config):
             # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
 
             # auto-regression:
-            y_temp = torch.zeros((y.size(0), 1, y.size(2))).to(config.device)
+            y_temp = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
+
             loss_temp_sum = 0
             iou_temp_sum = 0
-            for i_dec in range(config.n_seq_dec_look_back):
+            for i_dec in range(config.n_seq_dec_pool):
                 # Forward
                 y_pred = model(x_img[:, i_dec:i_dec+n_seq_enc_total, :],
                                x_param[:, i_dec:i_dec+n_seq_enc_total, :],
                                x_pos[:, i_dec:i_dec+n_seq_enc_total, :],
-                               y_temp.detach())
-                y_temp = torch.cat((y_temp, y_pred.unsqueeze(1)), dim=1).detach()
+                               y_temp)
+                # Shift elements left and insert the new prediction at the end
+                if y_temp.size(1) <= n_seq_enc_look_back:
+                    y_temp = torch.cat((y_temp, y_pred.unsqueeze(1)), dim=1).detach()
+                else:
+                    y_temp = torch.cat((y_temp[:, :-1, :], y_pred.unsqueeze(1)), dim=1).detach()
+
 
                 # Criterion
                 y_true = y[:, i_dec+n_seq_enc_look_back, :]
@@ -86,8 +92,8 @@ def train(config):
                 loss.backward()
                 optimizer.step()
 
-            train_loss_sum += loss_temp_sum / config.n_seq_dec_look_back
-            train_iou_sum += iou_temp_sum / config.n_seq_dec_look_back
+            train_loss_sum += loss_temp_sum / config.n_seq_dec_pool
+            train_iou_sum += iou_temp_sum / config.n_seq_dec_pool
 
             # Print
             if i_train % (train_len // 9) == 0:
@@ -121,19 +127,28 @@ def train(config):
         val_iou_sum = 0.0
         t_val_start = time.time()
         with torch.no_grad():
+            # auto-regression:
+            y_temp = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
+
             for i_train, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
                 # auto-regression:
                 y_temp = torch.zeros((y.size(0), 1, y.size(2))).to(config.device)
                 loss_temp_sum = 0
                 iou_temp_sum = 0
-                for i_dec in range(config.n_seq_dec_look_back):
+                for i_dec in range(config.n_seq_dec_pool):
                     # Forward
                     y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                                   y_temp)
-                    y_temp = torch.cat((y_temp, y_pred.unsqueeze(1)), dim=1)
+                                   y_temp[:, :i_dec + 1, :])
+
+                    # Shift elements left and insert the new prediction at the end
+                    if y_temp.size(1) <= n_seq_enc_look_back:
+                        y_temp[:, y_temp.size(1), :] = y_pred
+                    else:
+                        y_temp[:, :-1, :] = y_temp[:, 1:, :].clone()
+                        y_temp[:, -1, :] = y_pred
 
                     # Criterion
                     y_true = y[:, i_dec+n_seq_enc_look_back, :]
@@ -142,8 +157,8 @@ def train(config):
                     iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean()
                     iou_temp_sum += iou.cpu().item()
 
-                val_loss_sum += loss_temp_sum / config.n_seq_dec_look_back
-                val_iou_sum += iou_temp_sum / config.n_seq_dec_look_back
+                val_loss_sum += loss_temp_sum / config.n_seq_dec_pool
+                val_iou_sum += iou_temp_sum / config.n_seq_dec_pool
 
                 # Print
                 if i_train % (val_len // 9) == 0:

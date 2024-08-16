@@ -142,7 +142,7 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
                                y_temp[:, :i_dec + 1, :])
 
                 # Shift elements left and insert the new prediction at the end
-                if y_temp.size(1) < n_seq_enc_look_back:
+                if y_temp.size(1) <= n_seq_enc_look_back:
                     y_temp[:, y_temp.size(1), :] = y_pred
                 else:
                     y_temp[:, :-1, :] = y_temp[:, 1:, :].clone()
@@ -165,11 +165,11 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
 
                 i_record += 1
 
-            val_loss_sum += loss_temp_sum / config.n_seq_dec_look_back
-            val_y_loss[i, 0] = loss_temp_sum / config.n_seq_dec_look_back
+            val_loss_sum += loss_temp_sum / config.n_seq_dec_pool
+            val_y_loss[i, 0] = loss_temp_sum / config.n_seq_dec_pool
 
-            val_iou_sum += iou_temp_sum / config.n_seq_dec_look_back
-            val_y_iou[i, 0] = iou_temp_sum / config.n_seq_dec_look_back
+            val_iou_sum += iou_temp_sum / config.n_seq_dec_pool
+            val_y_iou[i, 0] = iou_temp_sum / config.n_seq_dec_pool
 
             if config.enable_save_attention:
                 pass
