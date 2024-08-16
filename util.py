@@ -1,8 +1,153 @@
 # src/utils/config.py
-import argparse, os, shutil, time, random, copy
+import argparse, os, shutil, time, random, copy, inspect, re
 import yaml
 from pprint import pprint
-import numpy as np, torch
+from datetime import datetime
+import numpy as np
+import torch
+import torch.nn as nn
+
+
+'''***********************************************************************'''
+''' Torch and tensor'''
+'''***********************************************************************'''
+
+
+# seed os, random, numpy, torch, etc.
+def seed_everything(seed=42):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def calculate_dataset_size(obj, print_size=False):
+    total_size = 0
+    for attr_name in dir(obj):
+        # Skip private attributes and methods
+        if attr_name.startswith('_'):
+            continue
+
+        attr_value = getattr(obj, attr_name)
+        if isinstance(attr_value, torch.Tensor):
+            tensor_size = get_tensor_size(attr_value)
+
+            # Print the attribute name and value
+            if print_size:
+                print(f'{attr_name} has size {tensor_size / 1e6} Mb')
+
+            total_size += tensor_size
+
+    if print_size:
+        print(f"total size: {total_size / 1e6} Mb")
+    return total_size
+
+
+def get_tensor_size(tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.element_size() * tensor.nelement()
+    return 0
+
+
+def get_model_parameter_num(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def get_model_neuron_num(model):
+    total_neurons = 0
+
+    def count_neurons(layer):
+        nonlocal total_neurons
+        if isinstance(layer, nn.Linear):
+            total_neurons += layer.out_features
+        elif isinstance(layer, nn.Conv2d):
+            out_channels = layer.out_channels
+            kernel_size = layer.kernel_size[0] * layer.kernel_size[1]  # Assuming square kernels
+            out_neurons = out_channels * kernel_size
+            total_neurons += out_neurons
+        elif isinstance(layer, (nn.LSTM, nn.GRU, nn.RNN)):
+            num_directions = 2 if layer.bidirectional else 1
+            total_neurons += layer.hidden_size * num_directions
+        elif isinstance(layer, nn.Module):
+            for sublayer in layer.children():
+                count_neurons(sublayer)
+
+    count_neurons(model)
+    return total_neurons
+
+
+def init_model_weights(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+        if m.bias is not None:
+            torch.nn.init.zeros_(m.bias)
+    elif isinstance(m, nn.LSTM):
+        for name, param in m.named_parameters():
+            if 'weight_ih' in name:
+                torch.nn.init.kaiming_uniform_(param.data, nonlinearity='relu')
+            elif 'weight_hh' in name:
+                torch.nn.init.kaiming_uniform_(param.data, nonlinearity='relu')
+            elif 'bias' in name:
+                param.data.fill_(0)
+    elif isinstance(m, nn.MultiheadAttention):
+        torch.nn.init.xavier_uniform_(m.in_proj_weight)
+        if m.in_proj_bias is not None:
+            torch.nn.init.zeros_(m.in_proj_bias)
+    elif isinstance(m, nn.Parameter):
+        torch.nn.init.uniform_(m, a=0.0, b=1.0)
+
+
+'''***********************************************************************'''
+'''Formatting and displaying '''
+'''***********************************************************************'''
+
+
+def elapsed_time_to_HHMMSS(elapsed_time):
+    hours, rem = divmod(int(elapsed_time), 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+
+def curr_time_to_str(format="%y%m%d-%H%M%S"):
+    # Get the current date and time
+    now = datetime.now()
+
+    # Format the date and time
+    formatted_date_time = now.strftime(format)
+
+    return formatted_date_time
+
+
+def function_name():
+    # Get the current frame
+    current_frame = inspect.currentframe()
+    # Get the calling frame
+    calling_frame = inspect.getouterframes(current_frame, 2)
+    return f"{calling_frame[1].function}"
+
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def int_split_by_comma(number):
+    return re.sub(r'(?<!^)(?=(\d{3})+$)', ',', str(number))
+
+
+'''***********************************************************************'''
+''' Config, yaml, and file directories'''
+'''***********************************************************************'''
 
 
 # dict could be referenced by '.', for example, some_dict.key
@@ -19,18 +164,6 @@ class AttributeDict(dict):
         return new_dict
 
 
-# seed os, random, numpy, torch, etc.
-def seed_everything(seed=42):
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
 # load config by its file name
 def load_config(config_path='config.yaml'):
     with open(config_path, 'r') as file:
@@ -38,17 +171,6 @@ def load_config(config_path='config.yaml'):
         config = AttributeDict(config)
         config.device = torch.device("cuda" if config.enable_gpu and torch.cuda.is_available() else "cpu")
     return config
-
-
-def str2bool(v):
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 def save_config(config, config_path='config.yaml'):
@@ -99,6 +221,15 @@ def get_config_from_cmd(parser):
     return proj_config
 
 
+# backup the config to output folder
+def backup_config(config):
+    output_file_path = os.path.join(config.output_dir, 'config.yaml')
+
+    # Save the dictionary to a YAML file
+    save_config(config, output_file_path)
+    print(f"> config backup: {output_file_path}")
+
+
 # prep all dir
 def setup_dir(config):
     print("> dataset_dir: ", os.path.abspath(config.dataset_dir))
@@ -126,7 +257,7 @@ def setup_dir(config):
         # Get the high resolution performance counter of CPU
         high_prec_time = time.perf_counter()
         decimal_part = f"{high_prec_time - int(high_prec_time):.8f}".split('.')[1]
-        task_name = f"{curr_time_str()}.{decimal_part}"
+        task_name = f"{curr_time_to_str()}.{decimal_part}"
 
     else:
         task_name = (f"{config.dataset_name}"
@@ -160,22 +291,18 @@ def setup_dir(config):
 
     config.checkpoint_dir = config.output_dir + config.checkpoint_dir
     os.makedirs(config.checkpoint_dir, exist_ok=True)
-    print("> checkpoint_dir: ", os.path.abspath(config.checkpoint_dir))
-
-
-# backup the config to output folder
-def backup_config(config):
-    output_file_path = os.path.join(config.output_dir, 'config.yaml')
-
-    # Save the dictionary to a YAML file
-    save_config(config, output_file_path)
-    print(f"> config backup: {output_file_path}")
+    print("> checkpoint_dir: ", os.path.abspath(config.checkpoint_dir))  # prep all dir
 
 
 def test_load_config():
     print('test_load_config')
     config = load_config()
     pprint(config)
+
+
+'''***********************************************************************'''
+'''Basic math tools'''
+'''***********************************************************************'''
 
 
 def compute_ape(y_pred, y_true, eps=1e-6):
@@ -190,7 +317,7 @@ def compute_ape(y_pred, y_true, eps=1e-6):
 def compute_iou(y_pred, y_true, noise_cutoff=0, eps=1e-6):
     """
     Calculate an IoU-like metric for scalar values representing the intersection of the area
-    under the predicted and true curves divided by the total area under the two curves.
+    under the predicted and true curves divided by the union area under the two curves.
 
     Parameters:
     y_true (torch.Tensor): Ground truth values, shape (batch_size, N).
@@ -222,63 +349,9 @@ def compute_iou(y_pred, y_true, noise_cutoff=0, eps=1e-6):
     return iou
 
 
-def time_to_HHMMSS(elapsed_time):
-    hours, rem = divmod(int(elapsed_time), 3600)
-    minutes, seconds = divmod(rem, 60)
-    return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-
-
-from datetime import datetime
-
-
-def curr_time_str():
-    # Get the current date and time
-    now = datetime.now()
-
-    # Format the date and time as yymmdd-hhmmss
-    formatted_date_time = now.strftime("%y%m%d-%H%M%S")
-
-    return formatted_date_time
-
-
-import inspect
-
-
-def function_name():
-    # Get the current frame
-    current_frame = inspect.currentframe()
-    # Get the calling frame
-    calling_frame = inspect.getouterframes(current_frame, 2)
-    return f"{calling_frame[1].function}"
-
-
-def calculate_dataset_size(obj, print_size=False):
-    total_size = 0
-    for attr_name in dir(obj):
-        # Skip private attributes and methods
-        if attr_name.startswith('_'):
-            continue
-
-        attr_value = getattr(obj, attr_name)
-        if isinstance(attr_value, torch.Tensor):
-            tensor_size = get_tensor_size(attr_value)
-
-            # Print the attribute name and value
-            if print_size:
-                print(f'{attr_name} has size {tensor_size / 1e6} Mb')
-
-            total_size += tensor_size
-
-    if print_size:
-        print(f"total size: {total_size / 1e6} Mb")
-    return total_size
-
-
-def get_tensor_size(tensor):
-    if isinstance(tensor, torch.Tensor):
-        return tensor.element_size() * tensor.nelement()
-    return 0
-
+'''***********************************************************************'''
+'''Project related settings'''
+'''***********************************************************************'''
 
 param_str_list = [
     "EXP_ID",

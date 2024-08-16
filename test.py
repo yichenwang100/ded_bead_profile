@@ -42,7 +42,7 @@ def test_trained_model(file_dir):
     testify(config, model, criterion, dataset, data_loader, test_mode='test')
 
 
-def deploy_trained_model(model_dir, output_dir):
+def deploy_trained_model(model_dir, output_dir, self_reg=False):
     import shutil
     def copy_folder(src, dst):
         try:
@@ -57,7 +57,7 @@ def deploy_trained_model(model_dir, output_dir):
     config = load_config(os.path.join(output_dir, 'config.yaml'))
     config.output_dir = output_dir
     config.enable_deploy_dataset = True
-    config.train_val_test_ratio = [0.001, 0.001, 0.998]
+    config.train_val_test_ratio = [0, 0, 1]
 
     '''temp override'''
     config.enable_save_attention = False
@@ -66,35 +66,46 @@ def deploy_trained_model(model_dir, output_dir):
     if config.enable_seed:
         seed_everything(seed=config.seed)
 
+    if self_reg:
+        config.batch_size = 1
+
     # Load the test dataset
-    dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
-    _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
+    dataset_list = config.dataset_exclude
+    for dataset_name in dataset_list:
+        dataset = MyDataset(config)
+        _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
 
-    # Initialize the model
-    model, criterion, _, _ = get_model(config)
+        # Initialize the model
+        model, criterion, _, _ = get_model(config)
 
-    # Load the best model weights
-    best_model_path = os.path.join(model_dir, 'best_model_wts.pth')
-    if not os.path.exists(best_model_path):
-        print(f"! path {best_model_path} does not exist!")
-        return
-    model.load_state_dict(torch.load(best_model_path))
+        # Load the best model weights
+        best_model_path = os.path.join(model_dir, 'best_model_wts.pth')
+        if not os.path.exists(best_model_path):
+            print(f"! path {best_model_path} does not exist!")
+            return
+        model.load_state_dict(torch.load(best_model_path))
 
-    # Move the model to the appropriate device
-    model = model.to(config.device)
+        # Move the model to the appropriate device
+        model = model.to(config.device)
 
-    # Test the model
-    testify(config, model, criterion, dataset, test_loader, test_mode='deploy')
+        # Test the model
+        print(f"\n> Testing dataset: {dataset_name}")
+        testify(config, model, criterion, dataset, test_loader, test_mode='deploy', extra_name=dataset_name)
 
 
-def testify(config, model, criterion, dataset, data_loader, test_mode='test'):
+def testify(config, model, criterion, dataset, data_loader, test_mode='test', extra_name=''):
     # Set the model to evaluation mode
     model.eval()
 
     ''' Test Starts '''
     batch_size = config.batch_size
     len_loader = len(data_loader)
-    len_data = len_loader * batch_size
+
+    n_seq_enc_look_back = config.n_seq_enc_look_back
+    n_seq_enc_total = config.n_seq_enc_total
+
+    len_data = len_loader * batch_size * n_seq_enc_look_back
+    i_record = 0
 
     val_loss_sum = 0.0
     val_y_loss = torch.zeros((len_data, 1))
@@ -105,38 +116,70 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test'):
     val_raw_data_history = torch.zeros((len_data, config.raw_data_size))  # add a mask column
     val_y_true_history = torch.zeros((len_data, config.output_size))  # batch size = 1
     val_y_pred_history = torch.zeros_like(val_y_true_history)
-    output_noise_cutoff = config.output_noise_cutoff
+    y_noise_cutoff = config.output_noise_cutoff
 
     if config.enable_save_attention:
         feature_attn_sum = torch.zeros((config.embed_dim, config.embed_dim))
-        temporal_attn_sum = torch.zeros((config.n_seq_total, config.n_seq_total))
+        temporal_attn_sum = torch.zeros((config.n_seq_enc_total, config.n_seq_enc_total))
 
     t_start = time.time()
+    y_temp = []
+    progress_bar = tqdm(range(len(data_loader)), ncols=100)
     with torch.no_grad():
-        for i, (index, x_img, x_param, x_pos, y) in enumerate(tqdm(data_loader)):
+        # auto-regression:
+        y_temp = torch.zeros(batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
+
+        for i, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
             # x, y = x.to(config.device), y.to(config.device)
-            y_pred = model(x_img, x_param, x_pos)
 
-            loss = criterion(y_pred, y).cpu().item()
-            val_loss_sum += loss
-            val_y_loss[i, 0] = loss
+            loss_temp_sum = 0
+            iou_temp_sum = 0
+            for i_dec in range(config.n_seq_dec_pool):
+                # Forward
+                y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
+                               x_param[:, i_dec:i_dec + n_seq_enc_total, :],
+                               x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
+                               y_temp[:, :i_dec + 1, :])
 
-            val_iou = compute_iou(y_pred, y, output_noise_cutoff).mean().cpu().item()
-            val_iou_sum += val_iou
-            val_y_iou[i, 0] = val_iou
+                # Shift elements left and insert the new prediction at the end
+                if y_temp.size(1) < n_seq_enc_look_back:
+                    y_temp[:, y_temp.size(1), :] = y_pred
+                else:
+                    y_temp[:, :-1, :] = y_temp[:, 1:, :].clone()
+                    y_temp[:, -1, :] = y_pred
 
-            val_y_true_history[i*batch_size:(i+1)*batch_size, :] = y.cpu().detach()
-            val_y_pred_history[i*batch_size:(i+1)*batch_size, :] = y_pred.cpu().detach()
+                # Criterion
+                y_true = y[:, i_dec+n_seq_enc_look_back, :]
+                loss = criterion(y_pred, y_true)
+                loss_temp_sum += loss.cpu().item()
+                iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean().cpu().item()
+                iou_temp_sum += iou
 
-            for i_index, sub_index in enumerate(index):
-                raw_data = dataset.get_raw_data(sub_index).cpu()
+                # Record
+                val_y_true_history[i_record, :] = y_true.cpu().detach()
+                val_y_pred_history[i_record, :] = y_pred.cpu().detach()
+
+                raw_data = dataset.get_raw_data(index, index_shift=i_dec).squeeze()
                 # get rid of the right most column for mask
-                val_raw_data_history[i*batch_size + i_index] = raw_data[:-1]
+                val_raw_data_history[i_record] = raw_data[:-1].cpu()
+
+                i_record += 1
+
+            val_loss_sum += loss_temp_sum / config.n_seq_dec_look_back
+            val_y_loss[i, 0] = loss_temp_sum / config.n_seq_dec_look_back
+
+            val_iou_sum += iou_temp_sum / config.n_seq_dec_look_back
+            val_y_iou[i, 0] = iou_temp_sum / config.n_seq_dec_look_back
 
             if config.enable_save_attention:
                 pass
                 # feature_attn_sum += model.encoder.encoder[0].attn_map.cpu().detach().squeeze(0)
                 # temporal_attn_sum += model.encoder.encoder[1].attn_map.cpu().detach().squeeze(0)
+
+            progress_bar.set_description(f"Step [{i}/{len(data_loader)}]"
+                                         f", L:{val_loss_sum / (i+1):.4f}"
+                                         f", iou:{val_iou_sum / (i+1):.3f}"
+                                         f"\t|")
 
     # metrics and temp results
     val_loss_mean = val_loss_sum / len_loader
@@ -157,7 +200,7 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test'):
 
     stats_df = pd.DataFrame(columns=column_header)
     stats_df.loc[0] = test_stats
-    stats_df.to_csv(os.path.join(config.output_dir, f"best_model_stats_{test_mode}.csv"), index=False)
+    stats_df.to_csv(os.path.join(config.output_dir, f"best_model_stats.{test_mode}.{extra_name}.csv"), index=False)
 
     ''' Save attention map '''
     if config.enable_save_attention:
@@ -174,7 +217,7 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test'):
     column_header += [f"MSE"]
     column_header += [f"IOU"]
     stats_df = pd.DataFrame(val_results.numpy(), columns=column_header)
-    stats_df.to_csv(os.path.join(config.output_dir, f"best_model_results_{test_mode}.csv"), index=False)
+    stats_df.to_csv(os.path.join(config.output_dir, f"best_model_results.{test_mode}.{extra_name}.csv"), index=False)
 
 
 if __name__ == '__main__':
@@ -187,7 +230,7 @@ if __name__ == '__main__':
         print(f"root_dir: {root_dir}")
         file_list = [entry.name for entry in os.scandir(root_dir)
                      if entry.is_dir()
-                     and entry.name.startswith('240808-213529.29041980')
+                     and entry.name.startswith('240810-020242.95447320')
                      ]
         print(f"> number of sub dir: {len(file_list)}")
         for i_file, file_name in enumerate(file_list):
@@ -198,14 +241,14 @@ if __name__ == '__main__':
         # model_dir = r'C:\mydata\output\proj_melt_pool_pred\test12_0'
         # model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
         # model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
-        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v3.3'
-        model_name = f"240810-020242.95447320.ffd_bilstm.embed6.sampling_1.lr_1.5e-4adap0.985.loss_iou_0.12.dropout_0.3.n_seq_200.batch_64"
+        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.1'
+        model_name = f"240815-174941.97001480.sample_100.enc_200.dec_100.batch_128.ffd_bilstm.embed6.lr_1.2e-4_0.985.wd_1e-4.mse_iou"
         model_dir = os.path.join(model_dir, model_name)
 
         # output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'
-        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v3.3.d'
+        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.1.d'
         output_dir = os.path.join(output_dir, model_name)
-        deploy_trained_model(model_dir=model_dir, output_dir=output_dir)
+        deploy_trained_model(model_dir=model_dir, output_dir=output_dir, self_reg=True)
 
     else:
         pass

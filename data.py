@@ -57,20 +57,25 @@ class MyDataset(Dataset):
         self.data_y = data_tensor[:, idx_lf:idx_rt].to(config.device)
 
         ''' Get indexable data '''
-        # | sequence before | this  | sequence after|
-        # | x, x, ..., x,   | x,    | x, x, ..., x, |
-        self.n_seq_before = config.n_seq_before
-        self.n_seq_after = config.n_seq_after
-        self.n_seq = config.n_seq_total
-        if self.n_seq != self.n_seq_before + self.n_seq_after + 1:
+        # | sequence look-back          | ego   | sequence look-ahead   |
+        # | x[-B], ..., x[-2], x[-1],   | x[0], | x[1], y[2], ..., x[A] |
+        # | y[-B], ..., y[-2], y[-1],   | y[0], | y[1], y[2], ..., y[A] |
+        self.n_seq_enc_look_back = config.n_seq_enc_look_back
+        self.n_seq_enc_look_ahead = config.n_seq_enc_look_ahead
+        if config.n_seq_enc_total != self.n_seq_enc_look_back + self.n_seq_enc_look_ahead + 1:
             raise RuntimeError("self.n_seq != self.n_seq_before + self.n_seq_after + 1")
+
+        if config.n_seq_dec_pool < self.n_seq_enc_look_back:
+            raise RuntimeError("self.n_seq_dec_pool < self.n_seq_enc_look_back")
+
+        self.n_seq_dec_pool = config.n_seq_dec_pool
 
         '''Mask data'''
         # last column: mask for valid profiles
-        valid_data_mask = data_tensor[self.n_seq_before:-1 - self.n_seq_after, -1].to(config.device) > 0
+        valid_data_mask = data_tensor[:, -1].to(config.device) > 0
 
         # RTCP on/off, separate to check its effects
-        rtcp_mask = self.data_param[self.n_seq_before:-1 - self.n_seq_after, 4] > 0
+        rtcp_mask = self.data_param[:, 4] > 0
         if 'enable_rtcp' in config and config.enable_rtcp == 'on_only':
             data_mask = valid_data_mask & rtcp_mask
         elif 'enable_rtcp' in config and config.enable_rtcp == 'off_only':
@@ -78,9 +83,11 @@ class MyDataset(Dataset):
         else:
             data_mask = valid_data_mask
 
-        self.data_index = data_mask.nonzero().squeeze()
-        self.data_index += self.n_seq_before
-        self.data_len = len(self.data_index)
+        self.raw_data_index = (data_mask[self.n_seq_enc_look_back:
+                                         -1 - self.n_seq_enc_look_ahead - self.n_seq_dec_pool]
+                               .nonzero().squeeze())
+        self.raw_data_index += self.n_seq_enc_look_back
+        self.data_len = len(self.raw_data_index)
 
         ''' Use stride for sub-sampling '''
         self.sys_sampling_interval = config.sys_sampling_interval
@@ -90,20 +97,20 @@ class MyDataset(Dataset):
         return self.data_len
 
     def __getitem__(self, index):
-        index = index * self.sys_sampling_interval
-        idx_center = self.data_index[index]
-        idx_lf = idx_center - self.n_seq_before
-        idx_rt = idx_center + self.n_seq_after + 1
+        raw_index = index * self.sys_sampling_interval
+        idx_ego = self.raw_data_index[raw_index]
+        idx_lf = idx_ego - self.n_seq_enc_look_back
+        idx_rt = idx_ego + self.n_seq_enc_look_ahead + self.n_seq_dec_pool + 1
         return (index,
                 self.data_img[idx_lf: idx_rt],
                 self.data_param[idx_lf: idx_rt],
                 self.data_pos[idx_lf: idx_rt],
-                self.data_y[idx_center])
+                self.data_y[idx_lf: idx_rt])
 
-    def get_raw_data(self, index):
-        index = index * self.sys_sampling_interval
-        idx_center = self.data_index[index]
-        return self.data_tensor[idx_center, self.param_index_lf:]
+    def get_raw_data(self, index, index_shift):
+        raw_index = index * self.sys_sampling_interval
+        idx_ego = self.raw_data_index[raw_index].cpu() + index_shift
+        return self.data_tensor[idx_ego, self.param_index_lf:]
 
 
 class MyCombinedDataset(Dataset):
@@ -181,29 +188,32 @@ def get_dataloaders(dataset, config, shuffle=True):
                          generator=torch.Generator().manual_seed(config.seed)))
     else:
         indices = list(range(len(dataset)))
-        train_dataset = Subset(dataset, indices[:train_size])
-        val_dataset = Subset(dataset, indices[train_size:train_size + val_size])
-        test_dataset = Subset(dataset, indices[train_size + val_size:])
+        train_dataset = Subset(dataset, indices[:train_size]) if train_size > 0 else None
+        val_dataset = Subset(dataset, indices[train_size:train_size + val_size]) if val_size > 0 else None
+        test_dataset = Subset(dataset, indices[train_size + val_size:]) if test_size > 0 else None
 
     # prep dataloader
     train_loader = DataLoader(train_dataset,
                               batch_size=config.batch_size,
                               shuffle=True if shuffle else False,
                               num_workers=config.num_workers,
+                              # pin_memory=True, # no need if already in gpu
                               drop_last=True,
-                              )
+                              ) if train_size > 0 else None
     val_loader = DataLoader(val_dataset,
                             batch_size=config.batch_size,
                             shuffle=False,
                             num_workers=config.num_workers,
+                            # pin_memory=True,
                             drop_last=True,
-                            )
+                            ) if val_size > 0 else None
     test_loader = DataLoader(test_dataset,
                              batch_size=config.batch_size,
                              shuffle=False,
                              num_workers=config.num_workers,
+                             # pin_memory=True,
                              drop_last=True,
-                             )
+                             ) if test_size > 0 else None
 
     return train_loader, val_loader, test_loader
 

@@ -42,11 +42,15 @@ def train(config):
     # Training loop starts
     print('\n> Training Loop Starts...')
     num_epochs = config.num_epochs
-    best_model_loss = float('inf')
+    n_seq_enc_look_back = config.n_seq_enc_look_back
+    n_seq_enc_total = config.n_seq_enc_total
+
+    best_model_metrics = 0
     best_model_stats = None
     best_model_wts = None
+    y_noise_cutoff = config.output_noise_cutoff
+
     progress_bar = tqdm(range(num_epochs), ncols=110)
-    output_noise_cutoff = config.output_noise_cutoff
     train_print_step = 0
     val_print_step = 0
     t_start = time.time()
@@ -55,30 +59,46 @@ def train(config):
         train_loss_sum = 0.0
         train_iou_sum = 0.0
         t_train_start = time.time()
-        for i, (index, x_img, x_param, x_pos, y) in enumerate(train_loader):
+        for i_train, (index, x_img, x_param, x_pos, y) in enumerate(train_loader):
             # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
 
-            # Forward
-            y_pred = model(x_img, x_param, x_pos)
-            loss = criterion(y_pred, y)
-            train_loss_sum += loss.cpu().item()
-            train_iou_sum += compute_iou(y_pred, y, output_noise_cutoff).mean().cpu().item()
+            # auto-regression:
+            y_temp = torch.zeros((y.size(0), 1, y.size(2))).to(config.device)
+            loss_temp_sum = 0
+            iou_temp_sum = 0
+            for i_dec in range(config.n_seq_dec_look_back):
+                # Forward
+                y_pred = model(x_img[:, i_dec:i_dec+n_seq_enc_total, :],
+                               x_param[:, i_dec:i_dec+n_seq_enc_total, :],
+                               x_pos[:, i_dec:i_dec+n_seq_enc_total, :],
+                               y_temp.detach())
+                y_temp = torch.cat((y_temp, y_pred.unsqueeze(1)), dim=1).detach()
 
-            # Backward and Optimization
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                # Criterion
+                y_true = y[:, i_dec+n_seq_enc_look_back, :]
+                loss = criterion(y_pred, y_true)
+                loss_temp_sum += loss.cpu().item()
+                iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean()
+                iou_temp_sum += iou.cpu().item()
+
+                # Backward and Optimization
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+            train_loss_sum += loss_temp_sum / config.n_seq_dec_look_back
+            train_iou_sum += iou_temp_sum / config.n_seq_dec_look_back
 
             # Print
-            if i % (train_len // 19) == 0:
-                temp_train_loss = train_loss_sum / (i + 1)
-                temp_train_iou = train_iou_sum / (i + 1)
+            if i_train % (train_len // 9) == 0:
+                temp_train_loss = train_loss_sum / (i_train + 1)
+                temp_train_iou = train_iou_sum / (i_train + 1)
                 t_elapsed = (time.time() - t_train_start) / 60  # min
                 progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
-                                             f"| train {i}/{train_len}"
+                                             f"| train {i_train}/{train_len}"
                                              f", L:{temp_train_loss:.4f}"
                                              f", iou:{temp_train_iou:.3f}"
-                                             f", t:{t_elapsed:.1f}/{t_elapsed / (i + 1) * train_len:.1f}m"
+                                             f", t:{t_elapsed:.1f}/{t_elapsed / (i_train + 1) * train_len:.1f}m"
                                              f"\t|")
 
                 if config.enable_tensorboard:
@@ -101,24 +121,40 @@ def train(config):
         val_iou_sum = 0.0
         t_val_start = time.time()
         with torch.no_grad():
-            for i, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
-                # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
-                y_pred = model(x_img, x_param, x_pos)
+            for i_train, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
-                loss = criterion(y_pred, y)
-                val_loss_sum += loss.cpu().item()
-                val_iou_sum += compute_iou(y_pred, y, output_noise_cutoff).mean().cpu().item()
+                # auto-regression:
+                y_temp = torch.zeros((y.size(0), 1, y.size(2))).to(config.device)
+                loss_temp_sum = 0
+                iou_temp_sum = 0
+                for i_dec in range(config.n_seq_dec_look_back):
+                    # Forward
+                    y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
+                                   x_param[:, i_dec:i_dec + n_seq_enc_total, :],
+                                   x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
+                                   y_temp)
+                    y_temp = torch.cat((y_temp, y_pred.unsqueeze(1)), dim=1)
+
+                    # Criterion
+                    y_true = y[:, i_dec+n_seq_enc_look_back, :]
+                    loss = criterion(y_pred, y_true)
+                    loss_temp_sum += loss.cpu().item()
+                    iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean()
+                    iou_temp_sum += iou.cpu().item()
+
+                val_loss_sum += loss_temp_sum / config.n_seq_dec_look_back
+                val_iou_sum += iou_temp_sum / config.n_seq_dec_look_back
 
                 # Print
-                if i % (val_len // 19) == 0:
-                    temp_val_loss = val_loss_sum / (i + 1)
-                    temp_val_iou = val_iou_sum / (i + 1)
+                if i_train % (val_len // 9) == 0:
+                    temp_val_loss = val_loss_sum / (i_train + 1)
+                    temp_val_iou = val_iou_sum / (i_train + 1)
                     t_elapsed = (time.time() - t_val_start) / 60  # min
                     progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
-                                                 f"| val {i}/{val_len}"
+                                                 f"| val {i_train}/{val_len}"
                                                  f", L:{temp_val_loss:.4f}"
                                                  f", iou:{temp_val_iou:.3f}"
-                                                 f", t:{t_elapsed:.1f}/{t_elapsed / (i + 1) * val_len:.1f}m"
+                                                 f", t:{t_elapsed:.1f}/{t_elapsed / (i_train + 1) * val_len:.1f}m"
                                                  f"\t|")
 
                     if config.enable_tensorboard:
@@ -158,8 +194,8 @@ def train(config):
                 history_stats_df.to_csv(f"{config.log_dir}/train_val_stats.csv", index=False)
 
         if config.enable_save_best_model:
-            if val_loss_mean < best_model_loss:
-                best_model_loss = val_loss_mean
+            if val_iou_mean > best_model_metrics:
+                best_model_metrics = val_iou_mean
                 best_model_wts = copy.deepcopy(model.state_dict())
                 best_model_stats = epoch_stats
 
