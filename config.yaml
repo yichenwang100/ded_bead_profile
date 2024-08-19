@@ -8,9 +8,9 @@ seed: 42
 enable_gpu: True
 cuda_index: 0
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v4.2'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v4.3'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'sample_100.enc_200.dec_100.pool_200.batch_128.mixed_ep_0.05.ffd_bilstm.embed_6.lr_1.2e-4_0.985.wd_1e-4.mse_iou'
+extra_name: 'sample_200.enc_200.dec_100.pool_200.schedule_ep_10.lr_1.2e-4_0.985.wd_1e-4.mix_loss'
 enable_computational_test: False
 
 # Data
@@ -19,7 +19,7 @@ dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
 dataset_iterate_ratio: 1.0 # use only portion of the dataset
-sys_sampling_interval: 100  # systematic sampling interval <--------------------------------------------
+sys_sampling_interval: 200  # systematic sampling interval <--------------------------------------------
 raw_timestamp_interval: 2.5  # ms
 raw_data_size: 121
 ## Data loader
@@ -80,13 +80,13 @@ output_option: 'Profile40' #'WHA', 'W4HA',
 output_embed_dim: 6
 
 # Training
-# mixed label
-enable_mixed_label: True
-mixed_ratio_drop_per_epoch: 0.05
+# Scheduled sampling
+enable_scheduled_sampling: True
+scheduled_sampling_max_epoch: 10
 # criterion
 criterion_option: 'mae_mse_iou' # 'mse', 'iou', 'mse_iou', 'mae_mse_iou'
-criterion_mae_lambda: 0.0
-criterion_mse_lambda: 0.9
+criterion_mae_lambda: 0.1
+criterion_mse_lambda: 0.8
 criterion_iou_lambda: 0.1
 # optimizer
 num_epochs: 80

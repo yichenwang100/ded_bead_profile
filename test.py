@@ -67,7 +67,9 @@ def deploy_trained_model(model_dir, output_dir, self_reg=False):
         seed_everything(seed=config.seed)
 
     if self_reg:
+        config.sys_sampling_interval = 1
         config.batch_size = 1
+        config.n_seq_dec_pool = 0
 
     # Load the test dataset
     dataset_list = config.dataset_exclude
@@ -123,62 +125,56 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
         temporal_attn_sum = torch.zeros((config.n_seq_enc_total, config.n_seq_enc_total))
 
     t_start = time.time()
-    y_temp = []
     progress_bar = tqdm(range(len(data_loader)), ncols=100)
     with torch.no_grad():
         # auto-regression:
-        y_temp = torch.zeros(batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
+        y_pool = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
 
-        for i, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
+        for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
             # x, y = x.to(config.device), y.to(config.device)
 
-            loss_temp_sum = 0
-            iou_temp_sum = 0
-            for i_dec in range(config.n_seq_dec_pool):
-                # Forward
-                y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
-                               x_param[:, i_dec:i_dec + n_seq_enc_total, :],
-                               x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                               y_temp[:, :i_dec + 1, :])
+            i_dec = 0
+            # Forward
+            y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
+                           x_param[:, i_dec:i_dec + n_seq_enc_total, :],
+                           x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
+                           y_pool)
 
-                # Shift elements left and insert the new prediction at the end
-                if y_temp.size(1) <= n_seq_enc_look_back:
-                    y_temp[:, y_temp.size(1), :] = y_pred
-                else:
-                    y_temp[:, :-1, :] = y_temp[:, 1:, :].clone()
-                    y_temp[:, -1, :] = y_pred
+            # Shift elements left and insert the new prediction at the end
+            if y_pool.size(1) <= n_seq_enc_look_back:
+                y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+            else:
+                y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
 
-                # Criterion
-                y_true = y[:, i_dec+n_seq_enc_look_back, :]
-                loss = criterion(y_pred, y_true)
-                loss_temp_sum += loss.cpu().item()
-                iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean().cpu().item()
-                iou_temp_sum += iou
+            # Criterion
+            y_true = y[:, i_dec+n_seq_enc_look_back, :]
 
-                # Record
-                val_y_true_history[i_record, :] = y_true.cpu().detach()
-                val_y_pred_history[i_record, :] = y_pred.cpu().detach()
+            loss = criterion(y_pred, y_true).cpu().item()
+            val_loss_sum += loss
+            val_y_loss[i_loader, 0] = loss
 
-                raw_data = dataset.get_raw_data(index, index_shift=i_dec).squeeze()
-                # get rid of the right most column for mask
-                val_raw_data_history[i_record] = raw_data[:-1].cpu()
+            iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean().cpu().item()
+            val_iou_sum += iou
+            val_y_iou[i_loader, 0] = iou
 
-                i_record += 1
+            # Record
+            val_y_true_history[i_record, :] = y_true.cpu().detach()
+            val_y_pred_history[i_record, :] = y_pred.cpu().detach()
 
-            val_loss_sum += loss_temp_sum / config.n_seq_dec_pool
-            val_y_loss[i, 0] = loss_temp_sum / config.n_seq_dec_pool
+            raw_data = dataset.get_raw_data(index, index_shift=i_dec).squeeze()
+            # get rid of the right most column for mask
+            val_raw_data_history[i_record] = raw_data[:-1].cpu()
 
-            val_iou_sum += iou_temp_sum / config.n_seq_dec_pool
-            val_y_iou[i, 0] = iou_temp_sum / config.n_seq_dec_pool
+            i_record += 1
 
             if config.enable_save_attention:
                 pass
                 # feature_attn_sum += model.encoder.encoder[0].attn_map.cpu().detach().squeeze(0)
                 # temporal_attn_sum += model.encoder.encoder[1].attn_map.cpu().detach().squeeze(0)
 
-            progress_bar.set_description(f"Step [{i}/{len(data_loader)}]"
-                                         f", L:{val_loss_sum / (i+1):.4f}"
-                                         f", iou:{val_iou_sum / (i+1):.3f}"
+            progress_bar.set_description(f"Step [{i_loader}/{len(data_loader)}]"
+                                         f", L:{val_loss_sum / (i_loader+1):.4f}"
+                                         f", iou:{val_iou_sum / (i_loader+1):.3f}"
                                          f"\t|")
 
     # metrics and temp results
@@ -241,12 +237,12 @@ if __name__ == '__main__':
         # model_dir = r'C:\mydata\output\proj_melt_pool_pred\test12_0'
         # model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
         # model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
-        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.1'
-        model_name = f"240815-174941.97001480.sample_100.enc_200.dec_100.batch_128.ffd_bilstm.embed6.lr_1.2e-4_0.985.wd_1e-4.mse_iou"
+        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.2'
+        model_name = f"240816-223723.44768600.sample_100.enc_200.dec_100.pool_200.batch_128.mixed_ep_0.05.ffd_bilstm.embed_6.lr_1.2e-4_0.985.wd_1e-4.mse_iou"
         model_dir = os.path.join(model_dir, model_name)
 
         # output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'
-        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.1.d'
+        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.2.d'
         output_dir = os.path.join(output_dir, model_name)
         deploy_trained_model(model_dir=model_dir, output_dir=output_dir, self_reg=True)
 

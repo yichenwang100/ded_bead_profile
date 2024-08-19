@@ -385,6 +385,8 @@ def get_model(config):
         criterion = MyIoULoss(config)
     elif 'criterion_option' in config and config.criterion_option == 'mse_iou':
         criterion = MyCombinedLoss(config)
+    elif 'criterion_option' in config and config.criterion_option == 'mae_mse_iou':
+        criterion = MyCombinedLoss(config)
     else:
         criterion = nn.MSELoss()
 

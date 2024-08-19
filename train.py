@@ -17,7 +17,7 @@ def train(config):
     # Prepare data
     dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
     train_loader, val_loader, test_loader = get_dataloaders(dataset, config)
-    train_len, val_len = len(train_loader), len(val_loader)
+    train_loader_len, val_loader_len = len(train_loader), len(val_loader)
 
     # Set up model, loss function, optimizer, and scheduler for adaptive lr
     model, criterion, optimizer, scheduler = get_model(config)
@@ -59,11 +59,11 @@ def train(config):
         train_loss_sum = 0.0
         train_iou_sum = 0.0
         t_train_start = time.time()
-        for i_train, (index, x_img, x_param, x_pos, y) in enumerate(train_loader):
+        for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(train_loader):
             # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
 
             # auto-regression:
-            y_temp = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
+            y_pool = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
 
             loss_temp_sum = 0
             iou_temp_sum = 0
@@ -72,24 +72,24 @@ def train(config):
                 y_pred = model(x_img[:, i_dec:i_dec+n_seq_enc_total, :],
                                x_param[:, i_dec:i_dec+n_seq_enc_total, :],
                                x_pos[:, i_dec:i_dec+n_seq_enc_total, :],
-                               y_temp)
+                               y_pool)
 
                 y_true = y[:, i_dec+n_seq_enc_look_back, :]
 
-                # use mixed labels of true and pred
+                # scheduled sampling: use mixed labels of true and pred
                 def is_using_true_label(i_epoch):
-                    return (torch.rand(1) < (1 - i_epoch * config.mixed_ratio_drop_per_epoch)).item()
+                    return (torch.rand(1) < (1 - i_epoch / config.scheduled_sampling_max_epoch)).item()
 
-                if 'enable_mixed_label' in config and config.enable_mixed_label:
+                if 'enable_scheduled_sampling' in config and config.enable_scheduled_sampling:
                     y_new = y_true if is_using_true_label(epoch) else y_pred
                 else:
                     y_new = y_pred
 
                 # Shift elements left and insert the new prediction at the end
-                if y_temp.size(1) <= n_seq_enc_look_back:
-                    y_temp = torch.cat((y_temp, y_new.unsqueeze(1)), dim=1).detach()
+                if y_pool.size(1) <= n_seq_enc_look_back:
+                    y_pool = torch.cat((y_pool, y_new.unsqueeze(1)), dim=1).detach()
                 else:
-                    y_temp = torch.cat((y_temp[:, :-1, :], y_new.unsqueeze(1)), dim=1).detach()
+                    y_pool = torch.cat((y_pool[:, 1:, :], y_new.unsqueeze(1)), dim=1).detach()
 
 
                 # Criterion
@@ -107,19 +107,20 @@ def train(config):
             train_iou_sum += iou_temp_sum / config.n_seq_dec_pool
 
             # Print
-            if i_train % (train_len // 9) == 0:
-                temp_train_loss = train_loss_sum / (i_train + 1)
-                temp_train_iou = train_iou_sum / (i_train + 1)
+            if i_loader % (train_loader_len // 4) == 0 or i_loader == train_loader_len-1:
+                train_print_step += 1
+
+                temp_train_loss = train_loss_sum / (i_loader + 1)
+                temp_train_iou = train_iou_sum / (i_loader + 1)
                 t_elapsed = (time.time() - t_train_start) / 60  # min
                 progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
-                                             f"| train {i_train}/{train_len}"
+                                             f"| train {i_loader}/{train_loader_len}"
                                              f", L:{temp_train_loss:.4f}"
                                              f", iou:{temp_train_iou:.3f}"
-                                             f", t:{t_elapsed:.1f}/{t_elapsed / (i_train + 1) * train_len:.1f}m"
+                                             f", t:{t_elapsed:.1f}/{t_elapsed / (i_loader + 1) * train_loader_len:.1f}m"
                                              f"\t|")
 
                 if config.enable_tensorboard:
-                    train_print_step += 1
                     logger.add_scalars(main_tag="step_loss",
                                        tag_scalar_dict={'train': temp_train_loss},
                                        global_step=train_print_step)
@@ -129,8 +130,8 @@ def train(config):
 
         # metrics and temp results
         lr = optimizer.param_groups[0]['lr']
-        train_loss_mean = train_loss_sum / train_len
-        train_iou_mean = train_iou_sum / train_len
+        train_loss_mean = train_loss_sum / train_loader_len
+        train_iou_mean = train_iou_sum / train_loader_len
 
         # Validation
         model.eval()
@@ -139,10 +140,10 @@ def train(config):
         t_val_start = time.time()
         with torch.no_grad():
 
-            for i_train, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
+            for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
                 # auto-regression:
-                y_temp = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
+                y_pool = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
                 loss_temp_sum = 0
                 iou_temp_sum = 0
                 for i_dec in range(config.n_seq_dec_pool):
@@ -150,14 +151,14 @@ def train(config):
                     y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                                   y_temp[:, :i_dec + 1, :])
+                                   y_pool[:, :i_dec + 1, :])
 
                     # Shift elements left and insert the new prediction at the end
-                    if y_temp.size(1) <= n_seq_enc_look_back:
-                        y_temp[:, y_temp.size(1), :] = y_pred
+                    if y_pool.size(1) <= n_seq_enc_look_back:
+                        y_pool[:, y_pool.size(1), :] = y_pred
                     else:
-                        y_temp[:, :-1, :] = y_temp[:, 1:, :].clone()
-                        y_temp[:, -1, :] = y_pred
+                        y_pool[:, :-1, :] = y_pool[:, 1:, :].clone()
+                        y_pool[:, -1, :] = y_pred
 
                     # Criterion
                     y_true = y[:, i_dec+n_seq_enc_look_back, :]
@@ -170,19 +171,20 @@ def train(config):
                 val_iou_sum += iou_temp_sum / config.n_seq_dec_pool
 
                 # Print
-                if i_train % (val_len // 9) == 0:
-                    temp_val_loss = val_loss_sum / (i_train + 1)
-                    temp_val_iou = val_iou_sum / (i_train + 1)
+                if i_loader % (val_loader_len // 4) == 0 or i_loader == val_loader_len-1:
+                    val_print_step += 1
+
+                    temp_val_loss = val_loss_sum / (i_loader + 1)
+                    temp_val_iou = val_iou_sum / (i_loader + 1)
                     t_elapsed = (time.time() - t_val_start) / 60  # min
                     progress_bar.set_description(f"Ep [{epoch + 1}/{num_epochs}]"
-                                                 f"| val {i_train}/{val_len}"
+                                                 f"| val {i_loader}/{val_loader_len}"
                                                  f", L:{temp_val_loss:.4f}"
                                                  f", iou:{temp_val_iou:.3f}"
-                                                 f", t:{t_elapsed:.1f}/{t_elapsed / (i_train + 1) * val_len:.1f}m"
+                                                 f", t:{t_elapsed:.1f}/{t_elapsed / (i_loader + 1) * val_loader_len:.1f}m"
                                                  f"\t|")
 
                     if config.enable_tensorboard:
-                        val_print_step += 1
                         logger.add_scalars(main_tag="step_loss",
                                            tag_scalar_dict={'val': temp_val_loss},
                                            global_step=val_print_step)
@@ -191,8 +193,8 @@ def train(config):
                                            global_step=val_print_step)
 
         # metrics and temp results
-        val_loss_mean = val_loss_sum / val_len
-        val_iou_mean = val_iou_sum / val_len
+        val_loss_mean = val_loss_sum / val_loader_len
+        val_iou_mean = val_iou_sum / val_loader_len
 
         # ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_iou', 'val_iou', 'extra']
         extra_text = f""
