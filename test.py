@@ -74,6 +74,7 @@ def deploy_trained_model(model_dir, output_dir, self_reg=False):
     # Load the test dataset
     dataset_list = config.dataset_exclude
     for dataset_name in dataset_list:
+        config.dataset_name = dataset_name
         dataset = MyDataset(config)
         _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
 
