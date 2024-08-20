@@ -69,12 +69,13 @@ def train(config):
             iou_temp_sum = 0
             for i_dec in range(config.n_seq_dec_pool):
                 # Forward
-                y_pred = model(x_img[:, i_dec:i_dec+n_seq_enc_total, :],
-                               x_param[:, i_dec:i_dec+n_seq_enc_total, :],
-                               x_pos[:, i_dec:i_dec+n_seq_enc_total, :],
-                               y_pool)
+                y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
+                               x_param[:, i_dec:i_dec + n_seq_enc_total, :],
+                               x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
+                               y_pool,
+                               reset_dec_hx=True)
 
-                y_true = y[:, i_dec+n_seq_enc_look_back, :]
+                y_true = y[:, i_dec + n_seq_enc_look_back, :]
 
                 # scheduled sampling: use mixed labels of true and pred
                 def is_using_true_label(i_epoch):
@@ -107,7 +108,7 @@ def train(config):
             train_iou_sum += iou_temp_sum / config.n_seq_dec_pool
 
             # Print
-            if i_loader % (train_loader_len // 4) == 0 or i_loader == train_loader_len-1:
+            if i_loader % (train_loader_len // 4) == 0 or i_loader == train_loader_len - 1:
                 train_print_step += 1
 
                 temp_train_loss = train_loss_sum / (i_loader + 1)
@@ -143,7 +144,9 @@ def train(config):
             for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
                 # auto-regression:
-                y_pool = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
+                # y_pool = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
+                y_pool = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
+
                 loss_temp_sum = 0
                 iou_temp_sum = 0
                 for i_dec in range(config.n_seq_dec_pool):
@@ -151,17 +154,21 @@ def train(config):
                     y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                                   y_pool[:, :i_dec + 1, :])
+                                   # y_pool[:, :i_dec + 1, :],
+                                   y_pool,
+                                   reset_dec_hx=(i_dec == 0)
+                                   )
 
                     # Shift elements left and insert the new prediction at the end
-                    if y_pool.size(1) <= n_seq_enc_look_back:
-                        y_pool[:, y_pool.size(1), :] = y_pred
-                    else:
-                        y_pool[:, :-1, :] = y_pool[:, 1:, :].clone()
-                        y_pool[:, -1, :] = y_pred
+                    # if y_pool.size(1) <= n_seq_enc_look_back:
+                    #     y_pool[:, y_pool.size(1), :] = y_pred
+                    # else:
+                    #     y_pool[:, :-1, :] = y_pool[:, 1:, :].clone()
+                    #     y_pool[:, -1, :] = y_pred
+                    y_pool = y_pred.unsqueeze(1)
 
                     # Criterion
-                    y_true = y[:, i_dec+n_seq_enc_look_back, :]
+                    y_true = y[:, i_dec + n_seq_enc_look_back, :]
                     loss = criterion(y_pred, y_true)
                     loss_temp_sum += loss.cpu().item()
                     iou = compute_iou(y_pred, y_true, y_noise_cutoff).mean()
@@ -171,7 +178,7 @@ def train(config):
                 val_iou_sum += iou_temp_sum / config.n_seq_dec_pool
 
                 # Print
-                if i_loader % (val_loader_len // 4) == 0 or i_loader == val_loader_len-1:
+                if i_loader % (val_loader_len // 4) == 0 or i_loader == val_loader_len - 1:
                     val_print_step += 1
 
                     temp_val_loss = val_loss_sum / (i_loader + 1)

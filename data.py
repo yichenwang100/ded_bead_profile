@@ -65,9 +65,6 @@ class MyDataset(Dataset):
         if config.n_seq_enc_total != self.n_seq_enc_look_back + self.n_seq_enc_look_ahead + 1:
             raise RuntimeError("self.n_seq != self.n_seq_before + self.n_seq_after + 1")
 
-        if config.n_seq_dec_pool < self.n_seq_enc_look_back:
-            raise RuntimeError("self.n_seq_dec_pool < self.n_seq_enc_look_back")
-
         self.n_seq_dec_pool = config.n_seq_dec_pool
 
         '''Mask data'''
@@ -322,6 +319,11 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
         if image.mode != 'L':
             image = image.convert('L')
         image = image_transform(image).unsqueeze(0).to(device)  # add a batch dimension
+        # TODO
+        if cnn_model.training():
+            print('cnn_model training')
+        else:
+            print('cnn_model evaluating')
         cnn_features = cnn_model(image).cpu().squeeze(0)  # remove the batch dimension
 
         # Control parameters (columns B=1 to N=13)

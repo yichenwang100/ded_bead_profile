@@ -172,25 +172,29 @@ class MyTemporalAttnBlock(nn.Module):
 
 
 class MyBiLSTMBlock(nn.Module):
-    def __init__(self, config, hidden_dim):
+    def __init__(self, config, hidden_dim, bidirectional=True):
         super().__init__()
         self.hidden_dim = hidden_dim
 
         # temporal wise attn
         self.lstm = nn.LSTM(input_size=self.hidden_dim,
-                            hidden_size=self.hidden_dim // 2,
+                            hidden_size=self.hidden_dim // 2 if bidirectional else self.hidden_dim,
                             num_layers=1,
                             batch_first=True,
-                            bidirectional=True,
+                            bidirectional=bidirectional,
                             )
+        self.hx = None
 
         # layer norm
         self.enable_layer_norm = config.enable_layer_norm
         if self.enable_layer_norm:
             self.ln = nn.LayerNorm(self.hidden_dim)
 
-    def forward(self, x):
-        x = self.lstm(x)[0]
+    def forward(self, x, reset_hx=True):
+        if reset_hx:
+            self.hx = None
+
+        x, self.hx = self.lstm(x, hx=self.hx)
 
         if self.enable_layer_norm:
             x = self.ln(x)
@@ -292,6 +296,7 @@ class MyDecoder(nn.Module):
         x = self.decoder(x)
         return x
 
+
 class MyDecoderPlus(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -303,10 +308,9 @@ class MyDecoderPlus(nn.Module):
 
         # st layer
         self.output_latent_dim = config.output_size * config.output_embed_dim
-        self.st_layer = nn.Sequential(
-            MyFeedForwardBlock(config, self.output_latent_dim),
-            MyBiLSTMBlock(config, self.output_latent_dim)
-        )
+        self.st_layer_1 = MyFeedForwardBlock(config, self.output_latent_dim)
+        self.st_layer_2 = MyBiLSTMBlock(config, self.output_latent_dim, bidirectional=False)
+        self.hx = None
 
         # output
         self.final_in_dim = config.embed_dim + self.output_latent_dim
@@ -321,9 +325,10 @@ class MyDecoderPlus(nn.Module):
             nn.ReLU(),
         )
 
-    def forward(self, x_latent, y_prev):
+    def forward(self, x_latent, y_prev, reset_hx=False):
         y_embed = self.embed(y_prev)
-        y_latent = self.st_layer(y_embed)[:, -1, :]
+        y_latent = self.st_layer_1(y_embed)
+        y_latent = self.st_layer_2(y_latent, reset_hx=reset_hx)[:, -1, :]
 
         x_latent = x_latent[:, self.n_seq_before, :]
         x = torch.cat((x_latent, y_latent), dim=-1)
@@ -343,7 +348,7 @@ class MyModel(nn.Module):
             self.decoder = MyDecoder(config)
         self.timing_on = False
 
-    def forward(self, x_img, x_param, x_pos, y_prev):
+    def forward(self, x_img, x_param, x_pos, y_prev, reset_dec_hx=False):
         if self.timing_on:
             time_count = 100
 
@@ -366,7 +371,7 @@ class MyModel(nn.Module):
         else:
             x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
             x = self.encoder(x)  # (B, N, H_c)
-            x = self.decoder(x, y_prev)  # (B, N, output_size)
+            x = self.decoder(x, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
         return x
 
 

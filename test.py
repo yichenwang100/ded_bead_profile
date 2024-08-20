@@ -104,9 +104,10 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
     len_loader = len(data_loader)
 
     n_seq_enc_look_back = config.n_seq_enc_look_back
+    # n_seq_enc_look_back = 200
     n_seq_enc_total = config.n_seq_enc_total
 
-    len_data = len_loader * batch_size * n_seq_enc_look_back
+    len_data = len_loader * batch_size * 1  # n_seq_enc_look_back
     i_record = 0
 
     val_loss_sum = 0.0
@@ -138,13 +139,15 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
             y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                            x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                            x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                           y_pool)
+                           y_pool,
+                           reset_dec_hx=(i_dec == 0))
 
             # Shift elements left and insert the new prediction at the end
-            if y_pool.size(1) <= n_seq_enc_look_back:
-                y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
-            else:
-                y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
+            # if y_pool.size(1) <= n_seq_enc_look_back:
+            #     y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+            # else:
+            #     y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
+            y_pool = y_pred.unsqueeze(1)
 
             # Criterion
             y_true = y[:, i_dec+n_seq_enc_look_back, :]
@@ -237,12 +240,12 @@ if __name__ == '__main__':
         # model_dir = r'C:\mydata\output\proj_melt_pool_pred\test12_0'
         # model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
         # model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
-        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.2'
-        model_name = f"240816-223723.44768600.sample_100.enc_200.dec_100.pool_200.batch_128.mixed_ep_0.05.ffd_bilstm.embed_6.lr_1.2e-4_0.985.wd_1e-4.mse_iou"
+        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.3'
+        model_name = f"240819-234309.19499440.sample_200.enc_200.dec_100.pool_200.dec_lstm.schedule_ep_10.lr_1.2e-4_0.985.wd_1e-4.mix_loss"
         model_dir = os.path.join(model_dir, model_name)
 
         # output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'
-        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.2.d'
+        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.3.d'
         output_dir = os.path.join(output_dir, model_name)
         deploy_trained_model(model_dir=model_dir, output_dir=output_dir, self_reg=True)
 
