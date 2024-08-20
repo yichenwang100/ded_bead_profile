@@ -1,17 +1,19 @@
 # src/utils/config.py
-import argparse, os, shutil, time, random, copy, inspect, re
-import yaml
+import os, shutil, time, copy, inspect, re
+import argparse, yaml
 from pprint import pprint
 from datetime import datetime
-import numpy as np
-import torch
-import torch.nn as nn
 
 
 '''***********************************************************************'''
 ''' Torch and tensor'''
 '''***********************************************************************'''
 
+import random
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.distributed as dist
 
 # seed os, random, numpy, torch, etc.
 def seed_everything(seed=42):
@@ -101,6 +103,21 @@ def init_model_weights(m):
         torch.nn.init.uniform_(m, a=0.0, b=1.0)
 
 
+def ddp_setup(config):
+    if config.ddp_local_rank < 0:
+        config.ddp_local_rank = 0
+
+    if config.ddp_world_size < 0:
+        config.ddp_world_size = torch.cuda.device_count()
+
+    dist.init_process_group('ncll',
+                            init_method='env://',
+                            rank=config.ddp_local_rank,
+                            world_size=config.ddp_world_size)
+
+def ddp_cleanup():
+    dist.destroy_process_group()
+
 '''***********************************************************************'''
 '''Formatting and displaying '''
 '''***********************************************************************'''
@@ -171,10 +188,16 @@ def load_config(config_path='config.yaml'):
         config = AttributeDict(config)
         if config.enable_gpu and torch.cuda.is_available():
             dev_name = "cuda"
+            if 'enable_ddp' in config and config.enable_ddp is False:
+                if 'dp_core_idx' in config and config.dp_core_idx > 0:
+                    dev_name = f'cuda:{config.cuda_core_idx}'
+                else:
+                    config.dp_core_idx = 0
         else:
             dev_name = "cpu"
         config.device = torch.device(dev_name)
-    return config
+
+        return config
 
 
 def save_config(config, config_path='config.yaml'):
@@ -236,8 +259,6 @@ def backup_config(config):
 
 # prep all dir
 def setup_dir(config):
-    print("> dataset_dir: ", os.path.abspath(config.dataset_dir))
-    print("> dataset_path: ", os.path.abspath(os.path.join(config.dataset_dir, config.dataset_name)) + '.pt')
 
     if config.enable_uuid_naming:
         # get a shortened UUID
@@ -279,6 +300,10 @@ def setup_dir(config):
     task_name += f".{config.extra_name}" if config.extra_name is not None else ""
     config.output_dir = config.output_dir + '/' + task_name + '/'
 
+    print("> task_name: ", task_name)
+    print("> dataset_dir: ", os.path.abspath(config.dataset_dir))
+    # print("> dataset_path: ", os.path.abspath(os.path.join(config.dataset_dir, config.dataset_name)))
+
     # remove the project dir if it exists
     if config.enable_rewrite_output_dir:
         if os.path.exists(config.output_dir):
@@ -291,11 +316,11 @@ def setup_dir(config):
 
     config.log_dir = config.output_dir + config.log_dir
     os.makedirs(config.log_dir, exist_ok=True)
-    print("> log_dir:\t", os.path.abspath(config.log_dir))
+    # print("> log_dir:\t", os.path.abspath(config.log_dir))
 
     config.checkpoint_dir = config.output_dir + config.checkpoint_dir
     os.makedirs(config.checkpoint_dir, exist_ok=True)
-    print("> checkpoint_dir: ", os.path.abspath(config.checkpoint_dir))  # prep all dir
+    # print("> checkpoint_dir: ", os.path.abspath(config.checkpoint_dir))  # prep all dir
 
 
 def test_load_config():

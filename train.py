@@ -11,8 +11,9 @@ def train(config):
     # set up dir
     setup_dir(config)
 
-    # Set up the device
-    config.device = torch.device("cuda" if (config.enable_gpu and torch.cuda.is_available()) else "cpu")
+    # set up ddp
+    if 'enable_ddp' in config and config.enable_ddp:
+        ddp_setup(config)
 
     # Prepare data
     dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
@@ -249,6 +250,10 @@ def train(config):
     if config.enable_tensorboard:
         logger.close()
 
+    # set up ddp
+    if 'enable_ddp' in config and config.enable_ddp:
+        ddp_cleanup()
+
 
 if __name__ == '__main__':
     config_raw = get_config_from_cmd(argparse.ArgumentParser())
@@ -271,5 +276,4 @@ if __name__ == '__main__':
                 train(config_train)
 
     else:
-        print('> Training one dataset with user modified config')
         train(config_raw)

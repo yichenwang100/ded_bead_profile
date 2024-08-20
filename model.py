@@ -379,8 +379,13 @@ def get_model(config):
     model = MyModel(config).to(config.device)
 
     # auto parallel in multiple gpu
-    if torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)
+    if config.enable_gpu:
+        if 'enable_ddp' in config and config.enable_ddp:
+            model = torch.nn.parallel.DistributedDataParallel(model,
+                                                              device_ids=[config.ddp_local_rank],
+                                                              output_device=config.ddp_local_rank,)
+        else:
+            model = nn.DataParallel(model, device_ids=[config.dp_core_idx])
 
     if 'enable_param_init' in config and config.enable_param_init:
         model.apply(init_model_weights)
@@ -510,5 +515,5 @@ if __name__ == '__main__':
 
 
     for i_list, _param_list in enumerate(total_params_list_list):
-        print(f"> Param list for H = {H_list[i_list]}: ",
+        print(f"> param list for H = {H_list[i_list]}: ",
               [int_split_by_comma(num) for num in _param_list])

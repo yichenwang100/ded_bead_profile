@@ -6,15 +6,18 @@ config_path: 'config.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
-cuda_index: 0
+dp_core_idx: 0
+enable_ddp: False  # DDP (DistributedDataParallel), enable this will disable 'DP (Data Parallel)'
+ddp_world_size: 2 # -1 means auto
+ddp_local_rank: 0 # -1 means auto
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v4.3'
+output_dir: '/home/ubuntu/Desktop/mydata/output/p2_ded_bead_profile/v4.4'
 enable_uuid_naming: True # if false, use customized naming
 extra_name: 'sample_200.enc_200.dec_100.pool_200.dec_lstm.schedule_ep_20.lr_1.2e-4_0.985.wd_1e-4.mix_loss'
 enable_computational_test: False
 
 # Data
-dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
+dataset_dir: '/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile/20240730'
 ## Dataset
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir

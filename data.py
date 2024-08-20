@@ -5,12 +5,14 @@ import torch, torchvision
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from torchvision import datasets, transforms
+from torch.utils.data.distributed import DistributedSampler
 
 import pandas as pd
 from PIL import Image
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
+from train import train
 from util import *
 
 ''' 
@@ -39,7 +41,7 @@ class MyDataset(Dataset):
             data_tensor = torch.randn((9999, data_hidden_dim))
         else:
             dataset_path = os.path.join(config.dataset_dir, config.dataset_name)
-            data_tensor = torch.load(dataset_path)
+            data_tensor = torch.load(dataset_path, weights_only=True)
 
         self.data_tensor = data_tensor  # into memory (not gpu memory)
         self.param_index_lf = config.img_start_idx + config.img_embed_dim
@@ -129,7 +131,7 @@ class MyCombinedDataset(Dataset):
         self.datasets = []
         self.dataset_len = []
         self.dataset_bytes = []
-        print(f"> Starting to load datasets (total number: [{file_num}])")
+        print(f"> starting to load datasets (total number: [{file_num}])")
         for i_file, file_name in enumerate(tqdm(file_list)):
             config.dataset_name = file_name
             dataset = MyDataset(config)
@@ -189,11 +191,28 @@ def get_dataloaders(dataset, config, shuffle=True):
         val_dataset = Subset(dataset, indices[train_size:train_size + val_size]) if val_size > 0 else None
         test_dataset = Subset(dataset, indices[train_size + val_size:]) if test_size > 0 else None
 
+    train_sampler = None
+    val_sampler = None
+    test_sampler = None
+    if 'enable_ddp' in config and config.enable_ddp:
+        train_sampler = DistributedSampler(train_dataset,
+                                           num_replicas=config.ddp_world_size,
+                                           rank=config.ddp_local_rank) if train_size > 0 else None
+
+        val_sampler = DistributedSampler(val_dataset,
+                                         num_replicas=config.ddp_world_size,
+                                         rank=config.ddp_local_rank) if train_size > 0 else None
+
+        test_sampler = DistributedSampler(test_dataset,
+                                          num_replicas=config.ddp_world_size,
+                                          rank=config.ddp_local_rank) if train_size > 0 else None
+
     # prep dataloader
     train_loader = DataLoader(train_dataset,
                               batch_size=config.batch_size,
                               shuffle=True if shuffle else False,
                               num_workers=config.num_workers,
+                              sampler=train_sampler if train_sampler is not None else None,
                               # pin_memory=True, # no need if already in gpu
                               drop_last=True,
                               ) if train_size > 0 else None
@@ -201,6 +220,7 @@ def get_dataloaders(dataset, config, shuffle=True):
                             batch_size=config.batch_size,
                             shuffle=False,
                             num_workers=config.num_workers,
+                            sampler=val_sampler if val_sampler is not None else None,
                             # pin_memory=True,
                             drop_last=True,
                             ) if val_size > 0 else None
@@ -208,6 +228,7 @@ def get_dataloaders(dataset, config, shuffle=True):
                              batch_size=config.batch_size,
                              shuffle=False,
                              num_workers=config.num_workers,
+                             sampler=test_sampler if test_sampler is not None else None,
                              # pin_memory=True,
                              drop_last=True,
                              ) if test_size > 0 else None
@@ -241,17 +262,17 @@ def test_dataset():
                 print(f"> element[{i_elem}] Int/Long/Float: "
                       f"  value: {element}")
 
-    print('\n> Dataset first item:')
+    print('\n> dataset first item:')
     data_item = dataset[0]
     print_data_item(data_item)
 
-    print('\n> Testing Dataloader...')
+    print('\n> testing dataloader...')
     train_loader, val_loader, test_loader = get_dataloaders(dataset, config)
     print(f"> train loader size: {len(train_loader)} ")
     print(f"> val loader size: {len(val_loader)} ")
     print(f"> test loader size: {len(test_loader)} ")
 
-    print('\n> Train loader first item:')
+    print('\n> train loader first item:')
     for data_item in train_loader:
         break
     print_data_item(data_item)
@@ -297,8 +318,7 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
         param.requires_grad = False
 
     # Move model to GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    cnn_model = cnn_model.to(device)
+    cnn_model = cnn_model.to(config.device)
 
     # Read the Excel file
     dataset_name = os.path.splitext(os.path.basename(xlsx_path))[0]
@@ -318,7 +338,7 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
         image = Image.open(img_path)
         if image.mode != 'L':
             image = image.convert('L')
-        image = image_transform(image).unsqueeze(0).to(device)  # add a batch dimension
+        image = image_transform(image).unsqueeze(0).to(config.device)  # add a batch dimension
         # TODO
         if cnn_model.training():
             print('cnn_model training')
@@ -361,7 +381,7 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
         os.makedirs(output_dir)
     tensor_save_path = os.path.join(output_dir, f"{dataset_name}_dataset.pt")
     torch.save(dataset_tensor, tensor_save_path)
-    print(f"> Dataset tensor saved at: {tensor_save_path} with size {dataset_tensor.size()}")
+    print(f"> dataset tensor saved at: {tensor_save_path} with size {dataset_tensor.size()}")
 
 
 def create_all_dataset_in_parallel(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):

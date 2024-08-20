@@ -5,17 +5,16 @@ import subprocess
 # 设置目标日期和时间
 target_datetime = datetime.datetime(year=2024,
                                     month=8,
-                                    day=5,
-                                    hour=3,
-                                    minute=0)
+                                    day=18,
+                                    hour=15,
+                                    minute=30)
 
 def run_batch():
     print('start to run .bat file...')
     subprocess.run(['multi_run.bat'], shell=True)
 
 def run_python_scripts():
-    py_list = ["xxx.py",
-               "yyy.py", ]
+    py_list = ["train.py"]
 
     for py_file in py_list:
         try:
@@ -37,5 +36,5 @@ while datetime.datetime.now() < target_datetime:
     time.sleep(60)  # 每分钟更新一次时间
 
 # 当时间达到或超过目标时间时，执行脚本
-# run_python_scripts()
-run_batch()
+run_python_scripts()
+# run_batch()
