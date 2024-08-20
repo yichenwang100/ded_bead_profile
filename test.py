@@ -85,7 +85,15 @@ def deploy_trained_model(model_dir, output_dir, self_reg=False):
         if not os.path.exists(best_model_path):
             print(f"! path {best_model_path} does not exist!")
             return
-        model.load_state_dict(torch.load(best_model_path))
+
+        # process states dics for parallel/non-parallel models
+        state_dict = torch.load(best_model_path)
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if not k.startswith('module.'):
+                new_state_dict[f"module.{k}"] = v
+        model.load_state_dict(new_state_dict)
+        # model.load_state_dict(torch.load(best_model_path))
 
         # Move the model to the appropriate device
         model = model.to(config.device)
@@ -140,14 +148,16 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
                            x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                            x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
                            y_pool,
-                           reset_dec_hx=(i_dec == 0))
+                           # reset_dec_hx=(i_dec == 0),
+                           reset_dec_hx=True,
+                           )
 
             # Shift elements left and insert the new prediction at the end
-            # if y_pool.size(1) <= n_seq_enc_look_back:
-            #     y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
-            # else:
-            #     y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
-            y_pool = y_pred.unsqueeze(1)
+            if y_pool.size(1) <= n_seq_enc_look_back:
+                y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+            else:
+                y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
+            # y_pool = y_pred.unsqueeze(1) # if keep lstm memory
 
             # Criterion
             y_true = y[:, i_dec+n_seq_enc_look_back, :]
@@ -241,7 +251,7 @@ if __name__ == '__main__':
         # model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
         # model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
         model_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.3'
-        model_name = f"240819-234309.19499440.sample_200.enc_200.dec_100.pool_200.dec_lstm.schedule_ep_10.lr_1.2e-4_0.985.wd_1e-4.mix_loss"
+        model_name = f"240820-000258.49774100.sample_200.enc_200.dec_100.pool_200.dec_lstm.schedule_ep_20.lr_1.2e-4_0.985.wd_1e-4.mix_loss"
         model_dir = os.path.join(model_dir, model_name)
 
         # output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'

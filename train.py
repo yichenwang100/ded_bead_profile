@@ -145,7 +145,6 @@ def train(config):
             for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
                 # auto-regression:
-                # y_pool = torch.zeros(config.batch_size, 1 + n_seq_enc_look_back, config.output_size).to(config.device)
                 y_pool = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
 
                 loss_temp_sum = 0
@@ -155,18 +154,18 @@ def train(config):
                     y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                                   # y_pool[:, :i_dec + 1, :],
                                    y_pool,
-                                   reset_dec_hx=(i_dec == 0)
+                                   # y_pool, # if keep lstm memory
+                                   # reset_dec_hx=(i_dec == 0)
+                                   reset_dec_hx=True,
                                    )
 
                     # Shift elements left and insert the new prediction at the end
-                    # if y_pool.size(1) <= n_seq_enc_look_back:
-                    #     y_pool[:, y_pool.size(1), :] = y_pred
-                    # else:
-                    #     y_pool[:, :-1, :] = y_pool[:, 1:, :].clone()
-                    #     y_pool[:, -1, :] = y_pred
-                    y_pool = y_pred.unsqueeze(1)
+                    if y_pool.size(1) <= n_seq_enc_look_back:
+                        y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+                    else:
+                        y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
+                    # y_pool = y_pred.unsqueeze(1) # if keep lstm memory
 
                     # Criterion
                     y_true = y[:, i_dec + n_seq_enc_look_back, :]

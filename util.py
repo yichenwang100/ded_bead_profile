@@ -190,7 +190,7 @@ def load_config(config_path='config.yaml'):
             dev_name = "cuda"
             if 'enable_ddp' in config and config.enable_ddp is False:
                 if 'dp_core_idx' in config and config.dp_core_idx > 0:
-                    dev_name = f'cuda:{config.cuda_core_idx}'
+                    dev_name = f'cuda:{config.dp_core_idx}'
                 else:
                     config.dp_core_idx = 0
         else:
