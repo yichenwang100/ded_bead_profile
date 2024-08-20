@@ -181,21 +181,28 @@ class AttributeDict(dict):
         return new_dict
 
 
+def config_setup_device(config):
+    if config.enable_gpu and torch.cuda.is_available():
+        dev_name = "cuda"
+
+        if 'dp_core_idx' in config and config.dp_core_idx > 0:
+            dev_name = f'cuda:{config.dp_core_idx}'
+        else:
+            config.dp_core_idx = 0
+
+    else:
+        dev_name = "cpu"
+    config.device = torch.device(dev_name)
+
+    return config
+
 # load config by its file name
 def load_config(config_path='config.yaml'):
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
         config = AttributeDict(config)
-        if config.enable_gpu and torch.cuda.is_available():
-            dev_name = "cuda"
-            if 'enable_ddp' in config and config.enable_ddp is False:
-                if 'dp_core_idx' in config and config.dp_core_idx > 0:
-                    dev_name = f'cuda:{config.dp_core_idx}'
-                else:
-                    config.dp_core_idx = 0
-        else:
-            dev_name = "cpu"
-        config.device = torch.device(dev_name)
+
+        config = config_setup_device(config)
 
         return config
 

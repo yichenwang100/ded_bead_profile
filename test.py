@@ -29,7 +29,7 @@ def test_trained_model(file_dir):
     if not os.path.exists(best_model_path):
         print(f"! path {best_model_path} does not exist!")
         return
-    model.load_state_dict(torch.load(best_model_path))
+    model.load_state_dict(torch.load(best_model_path, weights_only=True))
 
     # Move the model to the appropriate device
     model = model.to(config.device)
@@ -42,7 +42,11 @@ def test_trained_model(file_dir):
     testify(config, model, criterion, dataset, data_loader, test_mode='test')
 
 
-def deploy_trained_model(model_dir, output_dir, self_reg=False):
+def deploy_trained_model(model_dir, output_dir, dataset_dir,
+                         gpu_core_idx=0,
+                         use_all_dataset=True,
+                         dataset_ratio=[0, 0.5],
+                         self_reg=False):
     import shutil
     def copy_folder(src, dst):
         try:
@@ -55,7 +59,10 @@ def deploy_trained_model(model_dir, output_dir, self_reg=False):
 
     # Load configuration
     config = load_config(os.path.join(output_dir, 'config.yaml'))
+    config.dp_core_idx = gpu_core_idx
+    config = config_setup_device(config)
     config.output_dir = output_dir
+    config.dataset_dir = dataset_dir
     config.enable_deploy_dataset = True
     config.train_val_test_ratio = [0, 0, 1]
 
@@ -72,8 +79,15 @@ def deploy_trained_model(model_dir, output_dir, self_reg=False):
         config.n_seq_dec_pool = 0
 
     # Load the test dataset
-    dataset_list = config.dataset_exclude
-    for dataset_name in dataset_list:
+    if use_all_dataset:
+        raw_file_list = [file for file in os.listdir(config.dataset_dir)
+                        if file.endswith('.pt')]
+        file_num = int(len(raw_file_list))
+        file_list = raw_file_list[int(file_num * dataset_ratio[0]):int(file_num * dataset_ratio[1])]
+    else:
+        file_list = config.dataset_exclude
+
+    for dataset_name in file_list:
         config.dataset_name = dataset_name
         dataset = MyDataset(config)
         _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
@@ -88,7 +102,7 @@ def deploy_trained_model(model_dir, output_dir, self_reg=False):
             return
 
         # process states dics for parallel/non-parallel models
-        state_dict = torch.load(best_model_path)
+        state_dict = torch.load(best_model_path, weights_only=True)
         new_state_dict = {}
         for k, v in state_dict.items():
             if not k.startswith('module.'):
@@ -190,6 +204,7 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
                                          f", L:{val_loss_sum / (i_loader+1):.4f}"
                                          f", iou:{val_iou_sum / (i_loader+1):.3f}"
                                          f"\t|")
+            progress_bar.update()
 
     # metrics and temp results
     val_loss_mean = val_loss_sum / len_loader
@@ -251,14 +266,23 @@ if __name__ == '__main__':
         # model_dir = r'C:\mydata\output\proj_melt_pool_pred\test12_0'
         # model_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0'
         # model_name = f"240803-215833.28260170.ffd_ta.embed_default.no_gamma.ratio_1_no_noise_dataset.embed6.sampling_8.lr_1e-4adap0.96"
-        model_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.3'
+        model_dir = '/home/ubuntu/Desktop/mydata/output/p2_ded_bead_profile/v4.3'
         model_name = f"240820-000258.49774100.sample_200.enc_200.dec_100.pool_200.dec_lstm.schedule_ep_20.lr_1.2e-4_0.985.wd_1e-4.mix_loss"
         model_dir = os.path.join(model_dir, model_name)
 
+        dataset_dir = '/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile/20240730'
+
         # output_dir = r'C:\mydata\output\p2_ded_bead_profile\v2.0.d'
-        output_dir = r'C:\mydata\output\p2_ded_bead_profile\v4.3.d'
+        output_dir = '/home/ubuntu/Desktop/mydata/output/p2_ded_bead_profile/v4.3.d'
         output_dir = os.path.join(output_dir, model_name)
-        deploy_trained_model(model_dir=model_dir, output_dir=output_dir, self_reg=True)
+
+        deploy_trained_model(model_dir=model_dir,
+                             output_dir=output_dir,
+                             dataset_dir=dataset_dir,
+                             gpu_core_idx=1,
+                             use_all_dataset=True,
+                             dataset_ratio=[0.5, 1],
+                             self_reg=True)
 
     else:
         pass
