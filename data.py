@@ -12,7 +12,6 @@ from PIL import Image
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
-from train import train
 from util import *
 
 ''' 
@@ -55,8 +54,9 @@ class MyDataset(Dataset):
         idx_lf, idx_rt = idx_rt + config.pos_start_idx, idx_rt + config.pos_start_idx + config.pos_size
         self.data_pos = data_tensor[:, idx_lf:idx_rt].to(config.device)
 
-        idx_lf, idx_rt = idx_rt + config.label_start_index, idx_rt + config.label_start_index + config.label_size
-        self.data_y = data_tensor[:, idx_lf:idx_rt].to(config.device)
+        idx_lf = idx_rt + config.label_start_index
+        label_index = idx_lf + torch.linspace(0, config.label_crop_size - 1, config.label_size).long()
+        self.data_label = data_tensor[:, label_index].to(config.device)
 
         ''' Get indexable data '''
         # | sequence look-back          | ego   | sequence look-ahead   |
@@ -104,7 +104,7 @@ class MyDataset(Dataset):
                 self.data_img[idx_lf: idx_rt],
                 self.data_param[idx_lf: idx_rt],
                 self.data_pos[idx_lf: idx_rt],
-                self.data_y[idx_lf: idx_rt])
+                self.data_label[idx_lf: idx_rt])
 
     def get_raw_data(self, index, index_shift):
         raw_index = index * self.sys_sampling_interval
@@ -278,8 +278,84 @@ def test_dataset():
     print_data_item(data_item)
 
 
-def create_dataset(xlsx_path, img_root_dir, output_dir):
-    print(f"> create_dataset_from_xlsx: {xlsx_path}")
+def convert_xlsx_to_csv(folder_path):
+    # List all files in the folder
+    for filename in tqdm(os.listdir(folder_path)):
+        if filename.endswith('.xlsx'):
+            # Construct full file path
+            file_path = os.path.join(folder_path, filename)
+
+            # Read the Excel file
+            df = pd.read_excel(file_path, engine='openpyxl')
+
+            # Create the CSV file path
+            csv_filename = filename.replace('.xlsx', '.csv')
+            csv_file_path = os.path.join(folder_path, csv_filename)
+
+            # Save the DataFrame to a CSV file
+            df.to_csv(csv_file_path, index=False)
+
+            print(f"Converted {filename} to {csv_filename}")
+
+
+def calculate_statistics(csv_path):
+    df = pd.read_csv(csv_path)
+    stats = {}
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            stats[col] = {stat: np.nan for stat in
+                          ['mean', 'median', 'std', 'min', 'max', 'num_zeros', 'num_negative', 'num_positive',
+                           'pct_zeros']}
+        else:
+            total_count = len(df[col])
+            zero_count = (df[col] == 0).sum()
+            stats[col] = {
+                'mean': round(df[col].mean(), 5),
+                'median': round(df[col].median(), 5),
+                'std': round(df[col].std(), 5),
+                'min': round(df[col].min(), 5),
+                'max': round(df[col].max(), 5),
+                'num_zeros': zero_count,
+                'pct_zeros': round((zero_count / total_count) * 100, 5),
+                'num_negative': (df[col] < 0).sum(),
+                'num_positive': (df[col] > 0).sum()
+            }
+    return stats, len(df), df.columns  # Return stats, number of rows, and the column order
+
+
+def compute_stats_for_all_csv(directory_path):
+    results = []
+    csv_files = [f for f in os.listdir(directory_path) if f.endswith('.csv')]
+
+    for csv_file in tqdm(csv_files, desc="Processing CSV files"):
+        stats, data_size, columns = calculate_statistics(os.path.join(directory_path, csv_file))
+        for stat_name in ['mean', 'median', 'std', 'min', 'max', 'num_zeros', 'pct_zeros', 'num_negative',
+                          'num_positive']:
+            row = {
+                'Dataset': csv_file,
+                'Data Size': data_size,
+                'Statistic Type': stat_name.capitalize()
+            }
+            for col in columns:
+                row[col] = stats[col][stat_name]
+            results.append(row)
+
+    # Convert the results to a DataFrame
+    results_df = pd.DataFrame(results)
+
+    # Sort the DataFrame by the 'Statistic Type' column and then by the 'EXP_ID' column
+    results_df = results_df.sort_values(by=['Statistic Type', 'EXP_ID'])
+
+    # Determine the output file path
+    output_csv = os.path.join(os.path.dirname(directory_path), f"{os.path.basename(directory_path)}_stats.csv")
+
+    # Save the sorted DataFrame to the output CSV file
+    results_df.to_csv(output_csv, index=False, float_format='%.5f')
+    print(f"Statistics saved to {output_csv}")
+
+
+def create_dataset(data_file_path, img_root_dir, output_dir):
+    print(f"> create_dataset_from_file: {data_file_path}")
 
     config = load_config()
 
@@ -319,18 +395,24 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
 
     # Move model to GPU if available
     cnn_model = cnn_model.to(config.device)
+    cnn_model.eval()
 
     # Read the Excel file
-    dataset_name = os.path.splitext(os.path.basename(xlsx_path))[0]
-    print(f"> loading excels table [{dataset_name}], pls wait...")
-    df = pd.read_excel(xlsx_path)
+    dataset_name = os.path.splitext(os.path.basename(data_file_path))[0]
+    print(f"> loading csv table [{dataset_name}], pls wait...")
+    t_temp = time.time()
+    df = pd.read_csv(data_file_path)
+    print(f"> table loaded, used time: {time.time() - t_temp:.3f} s")
 
     # Creating pytroch tensor
     tensors = []
     t_start = time.time()
     for index, row in df.iterrows():
         if index % 2000 == 0:
-            print(f'> dataset [{dataset_name}] | index[{index}]/{len(df)} | elapsed: {time.time() - t_start}s')
+            print(f'> dataset [{dataset_name}] '
+                  f'| index[{index}]/{len(df)} '
+                  f'| elapsed: {time.time() - t_start:.3f}s'
+                  f'| remaining: {(time.time() - t_start) / (index + 1) * (len(df) - index):.3f}s')
         img_filename = row['IMG']
         img_path = os.path.join(img_root_dir, img_filename)
 
@@ -339,27 +421,26 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
         if image.mode != 'L':
             image = image.convert('L')
         image = image_transform(image).unsqueeze(0).to(config.device)  # add a batch dimension
-        # TODO
-        if cnn_model.training():
-            print('cnn_model training')
-        else:
-            print('cnn_model evaluating')
         cnn_features = cnn_model(image).cpu().squeeze(0)  # remove the batch dimension
 
-        # Control parameters (columns B=1 to N=13)
+        # Control parameters (columns B=2 to N=14)
         control_params = torch.tensor(row.iloc[1:14].values.astype(np.float32), dtype=torch.float32)
 
-        # Position data (columns O=14 to AC=28)
+        # Position data (columns O=15 to AC=29)
         position_data = torch.tensor(row.iloc[14:29].values.astype(np.float32), dtype=torch.float32)
 
-        # Label data (columns AD=29 to DR=121)
-        label_data = torch.tensor(row.iloc[29:122].values.astype(np.float32), dtype=torch.float32)
+        # Label data (columns AD=30 to XS=643)
+        label_data = torch.tensor(row.iloc[29:643].values.astype(np.float32), dtype=torch.float32)
+
+        # Drop data if width (column AD=30) is 0 or negative
+        if label_data[0] <= 0:
+            continue
 
         # make all negative value (due to camera error) to 0
         label_data[label_data < 0] = 0
 
-        # Create img mask (columns AQ=42 to CD=81)
-        if (row.iloc[42:82] == 0).all():
+        # Create img mask (columns AD=30 to last)
+        if (row.iloc[29:-1] <= 0).all():
             profile_mask = torch.tensor([0])
         else:
             profile_mask = torch.tensor([1])
@@ -384,10 +465,10 @@ def create_dataset(xlsx_path, img_root_dir, output_dir):
     print(f"> dataset tensor saved at: {tensor_save_path} with size {dataset_tensor.size()}")
 
 
-def create_all_dataset_in_parallel(xlsx_root_dir, img_root_dir, output_dir, num_worker=1):
-    dir_list = [os.path.join(xlsx_root_dir, entry.name) for entry in os.scandir(xlsx_root_dir)
+def create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=1):
+    dir_list = [os.path.join(data_root_dir, entry.name) for entry in os.scandir(data_root_dir)
                 if entry.is_file()
-                and entry.name.endswith('.xlsx')
+                and entry.name.endswith('.csv')
                 ]
 
     from concurrent.futures import ThreadPoolExecutor
@@ -397,10 +478,12 @@ def create_all_dataset_in_parallel(xlsx_root_dir, img_root_dir, output_dir, num_
 
 
 if __name__ == '__main__':
-    test_dataset()
-
-    # img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    # excel_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240730'
-    # output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240730'
-    # create_dataset(os.path.join(excel_root_dir, 'High_const_sin_1.xlsx'), img_root_dir, output_dir)
-    # create_all_dataset_in_parallel(excel_root_dir, img_root_dir, output_dir, num_worker=1)
+    # test_dataset()
+    #
+    img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
+    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240823'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240823'
+    # convert_xlsx_to_csv(data_root_dir)
+    # compute_stats_for_all_csv(data_root_dir)
+    # create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
+    create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=16)

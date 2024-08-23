@@ -5,9 +5,9 @@ import subprocess
 # 设置目标日期和时间
 target_datetime = datetime.datetime(year=2024,
                                     month=8,
-                                    day=18,
-                                    hour=15,
-                                    minute=30)
+                                    day=23,
+                                    hour=18,
+                                    minute=55)
 
 def run_batch():
     print('start to run .bat file...')

@@ -11,13 +11,13 @@ enable_ddp: False  # DDP (DistributedDataParallel), enable this will disable 'DP
 ddp_world_size: 2 # -1 means auto
 ddp_local_rank: 0 # -1 means auto
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v5.0'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v6.0'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'sample_200.enc_200.dec_100.pool_200.dec_lstm.no_auto_reg.lr_1.2e-4_0.985'
+extra_name: 'sample_200.enc_200.dec_100.pool_200.label_size_80.no_auto_reg.lr_1.5e-4_0.985.wd_off'
 enable_computational_test: False
 
 # Data
-dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
+dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240823'
 ## Dataset
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
@@ -51,8 +51,9 @@ pos_start_idx: 0
 pos_size: 15 # time, position, distance
 ## Feature / Output
 enable_standardization: False # not supported
-label_start_index: 13
-label_size: 40
+label_start_index: 113 # 6 for WHA, 7 for Sigmoid param, 100 for cropped data
+label_crop_size: 400  # crop from the original 600 points
+label_size: 80
 label_noise_cutoff: 0.01
 
 # Model
@@ -79,8 +80,7 @@ enable_dropout: True
 dropout: 0.3
 ## decoder
 decoder_option: 'default' # 'transformer'
-output_option: 'Profile40' #'WHA', 'W4HA',
-output_size: 40
+output_size: 80
 output_embed_dim: 6
 ## adaptor
 enable_adaptor: False
@@ -100,8 +100,8 @@ enable_early_stopping: False
 ## optimizer
 num_epochs: 200
 optimizer_option: 'adam_Vaswani_2017' # adam
-lr: 1.2e-4  # learning rate 1.0e-4
-enable_weight_decay: True
+lr: 1.5e-4  # learning rate 1.0e-4, 1.2e-4
+enable_weight_decay: False
 wd: 1.0e-4  # weight decay
 enable_adaptive_lr: True
 lr_gamma: 0.985  # lr reduction factor for each epoch 0.985, 0.96
