@@ -37,7 +37,7 @@ class MyDataset(Dataset):
             data_hidden_dim = (config.img_start_idx + config.img_embed_dim
                                + config.param_start_idx + config.param_size
                                + config.pos_start_idx + config.pos_size
-                               + config.output_size + 1)  # last 1 for mask
+                               + config.label_size + 1)  # last 1 for mask
             data_tensor = torch.randn((9999, data_hidden_dim))
         else:
             dataset_path = os.path.join(config.dataset_dir, config.dataset_name)
@@ -55,7 +55,7 @@ class MyDataset(Dataset):
         idx_lf, idx_rt = idx_rt + config.pos_start_idx, idx_rt + config.pos_start_idx + config.pos_size
         self.data_pos = data_tensor[:, idx_lf:idx_rt].to(config.device)
 
-        idx_lf, idx_rt = idx_rt + config.output_start_index, idx_rt + config.output_start_index + config.output_size
+        idx_lf, idx_rt = idx_rt + config.label_start_index, idx_rt + config.label_start_index + config.label_size
         self.data_y = data_tensor[:, idx_lf:idx_rt].to(config.device)
 
         ''' Get indexable data '''

@@ -21,7 +21,8 @@ def train(config):
     train_loader_len, val_loader_len = len(train_loader), len(val_loader)
 
     # Set up model, loss function, optimizer, and scheduler for adaptive lr
-    model, criterion, optimizer, scheduler = get_model(config)
+    model, adaptor, criterion, optimizer, scheduler = get_model(config)
+    enable_auto_regression = config.decoder_option == 'transformer'
 
     # Backup config to output dir
     backup_config(config)
@@ -49,7 +50,7 @@ def train(config):
     best_model_metrics = 0
     best_model_stats = None
     best_model_wts = None
-    y_noise_cutoff = config.output_noise_cutoff
+    y_noise_cutoff = config.label_noise_cutoff
 
     progress_bar = tqdm(range(num_epochs), ncols=110)
     train_print_step = 0
@@ -64,7 +65,8 @@ def train(config):
             # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
 
             # auto-regression:
-            y_pool = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
+            if enable_auto_regression:
+                y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=y.device)
 
             loss_temp_sum = 0
             iou_temp_sum = 0
@@ -73,26 +75,30 @@ def train(config):
                 y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                                x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                                x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                               y_pool,
+                               y_pool if enable_auto_regression else None,
                                reset_dec_hx=True)
 
                 y_true = y[:, i_dec + n_seq_enc_look_back, :]
 
                 # scheduled sampling: use mixed labels of true and pred
-                def is_using_true_label(i_epoch):
-                    return (torch.rand(1) < (1 - i_epoch / config.scheduled_sampling_max_epoch)).item()
+                if enable_auto_regression:
+                    def is_using_true_label(i_epoch):
+                        return (torch.rand(1) < (1 - i_epoch / config.scheduled_sampling_max_epoch)).item()
 
-                if 'enable_scheduled_sampling' in config and config.enable_scheduled_sampling:
-                    y_new = y_true if is_using_true_label(epoch) else y_pred
-                else:
-                    y_new = y_pred
+                    if 'enable_scheduled_sampling' in config and config.enable_scheduled_sampling:
+                        y_new = y_true if is_using_true_label(epoch) else y_pred
+                    else:
+                        y_new = y_pred
 
-                # Shift elements left and insert the new prediction at the end
-                if y_pool.size(1) <= n_seq_enc_look_back:
-                    y_pool = torch.cat((y_pool, y_new.unsqueeze(1)), dim=1).detach()
-                else:
-                    y_pool = torch.cat((y_pool[:, 1:, :], y_new.unsqueeze(1)), dim=1).detach()
+                    # Shift elements left and insert the new prediction at the end
+                    if y_pool.size(1) <= n_seq_enc_look_back:
+                        y_pool = torch.cat((y_pool, y_new.unsqueeze(1)), dim=1).detach()
+                    else:
+                        y_pool = torch.cat((y_pool[:, 1:, :], y_new.unsqueeze(1)), dim=1).detach()
 
+                # Adaptor
+                if 'enable_adaptor' in config and config.enable_adaptor:
+                    y_pred = adaptor.compute(y_pred)
 
                 # Criterion
                 loss = criterion(y_pred, y_true)
@@ -145,7 +151,8 @@ def train(config):
             for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
                 # auto-regression:
-                y_pool = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
+                if enable_auto_regression:
+                    y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=y.device)
 
                 loss_temp_sum = 0
                 iou_temp_sum = 0
@@ -154,18 +161,20 @@ def train(config):
                     y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                                    x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                                   y_pool,
-                                   # y_pool, # if keep lstm memory
-                                   # reset_dec_hx=(i_dec == 0)
+                                   y_pool if enable_auto_regression else None,
                                    reset_dec_hx=True,
                                    )
 
-                    # Shift elements left and insert the new prediction at the end
-                    if y_pool.size(1) <= n_seq_enc_look_back:
-                        y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
-                    else:
-                        y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
-                    # y_pool = y_pred.unsqueeze(1) # if keep lstm memory
+                    if enable_auto_regression:
+                        # Shift elements left and insert the new prediction at the end
+                        if y_pool.size(1) <= n_seq_enc_look_back:
+                            y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+                        else:
+                            y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
+
+                    # Adaptor
+                    if 'enable_adaptor' in config and config.enable_adaptor:
+                        y_pred = adaptor.compute(y_pred)
 
                     # Criterion
                     y_true = y[:, i_dec + n_seq_enc_look_back, :]

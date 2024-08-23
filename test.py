@@ -22,7 +22,7 @@ def test_trained_model(file_dir):
     _, _, data_loader = get_dataloaders(dataset, config)
 
     # Initialize the model
-    model, criterion, _, _ = get_model(config)
+    model, adaptor, criterion, _, _ = get_model(config)
 
     # Load the best model weights
     best_model_path = os.path.join(file_dir, 'best_model_wts.pth')
@@ -93,7 +93,7 @@ def deploy_trained_model(model_dir, output_dir, dataset_dir,
         _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
 
         # Initialize the model
-        model, criterion, _, _ = get_model(config)
+        model, adaptor, criterion, _, _ = get_model(config)
 
         # Load the best model weights
         best_model_path = os.path.join(model_dir, 'best_model_wts.pth')
@@ -115,10 +115,10 @@ def deploy_trained_model(model_dir, output_dir, dataset_dir,
 
         # Test the model
         print(f"\n> Testing dataset: {dataset_name}")
-        testify(config, model, criterion, dataset, test_loader, test_mode='deploy', extra_name=dataset_name)
+        testify(config, model, adaptor, criterion, dataset, test_loader, test_mode='deploy', extra_name=dataset_name)
 
 
-def testify(config, model, criterion, dataset, data_loader, test_mode='test', extra_name=''):
+def testify(config, model, adaptor, criterion, dataset, data_loader, test_mode='test', extra_name=''):
     # Set the model to evaluation mode
     model.eval()
 
@@ -140,9 +140,11 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
     val_y_iou = torch.zeros((len_data, 1))
 
     val_raw_data_history = torch.zeros((len_data, config.raw_data_size))  # add a mask column
-    val_y_true_history = torch.zeros((len_data, config.output_size))  # batch size = 1
+    val_y_true_history = torch.zeros((len_data, config.label_size))  # batch size = 1
     val_y_pred_history = torch.zeros_like(val_y_true_history)
-    y_noise_cutoff = config.output_noise_cutoff
+    y_noise_cutoff = config.label_noise_cutoff
+
+    enable_auto_regression = config.decoder_option == 'transformer'
 
     if config.enable_save_attention:
         feature_attn_sum = torch.zeros((config.embed_dim, config.embed_dim))
@@ -152,7 +154,8 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
     progress_bar = tqdm(range(len(data_loader)), ncols=100)
     with torch.no_grad():
         # auto-regression:
-        y_pool = torch.zeros(config.batch_size, 1, config.output_size).to(config.device)
+        if enable_auto_regression:
+            y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=config.device)
 
         for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
             # x, y = x.to(config.device), y.to(config.device)
@@ -162,21 +165,26 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
             y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
                            x_param[:, i_dec:i_dec + n_seq_enc_total, :],
                            x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                           y_pool,
+                           y_pool if enable_auto_regression else None,
                            # reset_dec_hx=(i_dec == 0),
                            reset_dec_hx=True,
                            )
 
+            y_true = y[:, i_dec + n_seq_enc_look_back, :]
+
             # Shift elements left and insert the new prediction at the end
-            if y_pool.size(1) <= n_seq_enc_look_back:
-                y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
-            else:
-                y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
-            # y_pool = y_pred.unsqueeze(1) # if keep lstm memory
+            if enable_auto_regression:
+                if y_pool.size(1) <= n_seq_enc_look_back:
+                    y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+                else:
+                    y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
+                # y_pool = y_pred.unsqueeze(1) # if keep lstm memory
+
+            # Adaptor
+            if 'enable_adaptor' in config and config.enable_adaptor:
+                y_pred = adaptor.compute(y_pred)
 
             # Criterion
-            y_true = y[:, i_dec+n_seq_enc_look_back, :]
-
             loss = criterion(y_pred, y_true).cpu().item()
             val_loss_sum += loss
             val_y_loss[i_loader, 0] = loss
@@ -237,8 +245,8 @@ def testify(config, model, criterion, dataset, data_loader, test_mode='test', ex
                              val_y_pred_history, val_y_true_history,
                              val_y_loss, val_y_iou), dim=1)
     column_header = excel_headers.copy()
-    column_header += [f"Y_PRED_{i + 1}" for i in range(config.output_size)]
-    column_header += [f"Y_TRUE_{i + 1}" for i in range(config.output_size)]
+    column_header += [f"Y_PRED_{i + 1}" for i in range(config.label_size)]
+    column_header += [f"Y_TRUE_{i + 1}" for i in range(config.label_size)]
     column_header += [f"MSE"]
     column_header += [f"IOU"]
     stats_df = pd.DataFrame(val_results.numpy(), columns=column_header)

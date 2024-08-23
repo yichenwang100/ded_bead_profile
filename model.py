@@ -9,7 +9,7 @@ class MyIoULoss(nn.Module):
     def __init__(self, config, smooth=1e-6):
         super().__init__()
         # self.smooth = smooth
-        self.noise_cutoff = config.output_noise_cutoff
+        self.noise_cutoff = config.label_noise_cutoff
 
     def forward(self, y_pred, y_true):
         # preds = preds.view(-1)
@@ -35,9 +35,9 @@ class MyCombinedLoss(nn.Module):
         self.iou_loss_lambda = config.criterion_iou_lambda
 
     def forward(self, y_pred, y_true):
-        mae_loss = self.mae_loss(y_pred, y_true)
-        mse_loss = self.mse_loss(y_pred, y_true)
-        iou_loss = self.iou_loss(y_pred, y_true)
+        mae_loss = self.mae_loss(y_pred, y_true) if self.mae_loss_lambda != 0 else 0
+        mse_loss = self.mse_loss(y_pred, y_true) if self.mse_loss_lambda != 0 else 0
+        iou_loss = self.iou_loss(y_pred, y_true) if self.iou_loss_lambda != 0 else 0
         return (mae_loss * self.mae_loss_lambda +
                 mse_loss * self.mse_loss_lambda +
                 iou_loss * self.iou_loss_lambda)
@@ -344,11 +344,13 @@ class MyModel(nn.Module):
         self.encoder = MyEncoder(config)
         if 'decoder_option' in config and config.decoder_option == 'transformer':
             self.decoder = MyDecoderPlus(config)
+            self.enable_auto_regression = True
         else:
             self.decoder = MyDecoder(config)
+            self.enable_auto_regression = False
         self.timing_on = False
 
-    def forward(self, x_img, x_param, x_pos, y_prev, reset_dec_hx=False):
+    def forward(self, x_img, x_param, x_pos, y_prev=None, reset_dec_hx=False):
         if self.timing_on:
             time_count = 100
 
@@ -362,7 +364,10 @@ class MyModel(nn.Module):
             time_enc = time.time()
 
             for i in range(time_count):
-                x = self.decoder(x_enc, y_prev)  # (B, N, output_size)
+                if self.enable_auto_regression:
+                    x = self.decoder(x_enc, y_prev)  # (B, N, output_size)
+                else:
+                    x = self.decoder(x_enc)
             time_dec = time.time()
             print(f'> model timing: ')
             print(f'time_embed_elapsed, {(time_embed - time_start) / time_count * 1e6:.3f}us')
@@ -371,8 +376,75 @@ class MyModel(nn.Module):
         else:
             x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
             x = self.encoder(x)  # (B, N, H_c)
-            x = self.decoder(x, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
+            if self.enable_auto_regression:
+                x = self.decoder(x, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
+            else:
+                x = self.decoder(x)
         return x
+
+
+class MyAdaptor(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.methods = {'GMM3': self.compute_gmm,
+                        'Fourier3': self.compute_fourier,
+                        'Sigmoid6': self.compute_mirror_sigmoid,
+                        }
+
+        self.adaptor_option = config.adaptor_option
+        if self.adaptor_option not in self.methods:
+            raise RuntimeError(f'Adaptor option {self.adaptor_option} is not supported')
+        self.method = self.methods[self.adaptor_option]
+
+        self.component_size = config.adaptor_component_size
+        self.label_size = config.label_size
+        self.x = torch.tensor(range(self.label_size), dtype=torch.float32, device=config.device)
+        self.x = self.x.view(1, 1, -1)  # Reshape for broadcasting
+
+    def compute_gmm(self, x, params):
+        # param[:, :, 0]: height
+        # param[:, :, 1]: steepness
+        # param[:, :, 2]: x shift
+        # steepness = torch.clamp(params[:, :, 1], max=50).unsqueeze(-1)  # Prevent overflow in exp
+        y = params[:, :, 0].unsqueeze(-1) * torch.exp(-params[:, :, 1].unsqueeze(-1) * (x - params[:, :, 2].unsqueeze(-1)) ** 2)
+        y = torch.nan_to_num(y, nan=0.0)  # Replace NaNs with 0
+        return y
+
+
+    def compute_fourier(self, x, param):
+        # param[0]: height
+        # param[1]: frequency
+        # param[2]: x shift
+        y = param[0] * torch.sin(param[1] * (x - param[2]))
+        y = torch.nan_to_num(y, nan=0.0)  # Replace NaNs with 0
+        return y
+
+    def compute_mirror_sigmoid(self, x, param):
+        # param[0]: central position
+        # param[1]: height
+        # param[2]: steepness left
+        # param[3]: x shift left
+        # param[4]: steepness right
+        # param[5]: x shift right
+
+        steepness_left = torch.clamp(param[2], max=50)  # Prevent overflow in exp
+        y_left = param[1] / (1 + torch.exp(steepness_left * (x - param[3])))
+        y_left[x < param[0]] = 0
+
+        steepness_right = torch.clamp(param[4], max=50)  # Prevent overflow in exp
+        y_right = param[1] / (1 + torch.exp(steepness_right * (x - param[5])))
+        y_right[x > param[0]] = 0
+
+        y = y_left + y_right
+        y = torch.nan_to_num(y, nan=0.0)  # Replace NaNs with 0
+        return y
+
+
+    def compute(self, params):
+        params = params.view(params.size(0), self.component_size, 3)
+        result = self.method(self.x, params)
+        result = result.sum(dim=1)  # Sum over the component axis
+        return result
 
 
 def get_model(config):
@@ -390,7 +462,13 @@ def get_model(config):
     if 'enable_param_init' in config and config.enable_param_init:
         model.apply(init_model_weights)
 
+    # adaptor/reconstructor
+    adaptor = None
+    if 'enable_adaptor' in config and config.enable_adaptor:
+        adaptor = MyAdaptor(config).to(config.device)
+
     # criterion
+    criterion = None
     if 'criterion_option' in config and config.criterion_option == 'iou':
         criterion = MyIoULoss(config)
     elif 'criterion_option' in config and config.criterion_option == 'mse_iou':
@@ -415,7 +493,7 @@ def get_model(config):
                                      lr=config.lr,
                                      weight_decay=config.wd if config.enable_weight_decay else 0)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=config.lr_gamma)
-    return model, criterion, optimizer, scheduler
+    return model, adaptor, criterion, optimizer, scheduler
 
 
 if __name__ == '__main__':
@@ -467,7 +545,7 @@ if __name__ == '__main__':
             print('>' * 50)
             print('> model: ', model_name)
             config.model = model_name
-            model, _, _, _ = get_model(config)
+            model, _, _, _, _ = get_model(config)
             total_params = get_model_parameter_num(model)
             total_params_list.append(total_params)
             print('> model param size: ', total_params)

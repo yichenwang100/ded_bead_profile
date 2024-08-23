@@ -11,13 +11,13 @@ enable_ddp: False  # DDP (DistributedDataParallel), enable this will disable 'DP
 ddp_world_size: 2 # -1 means auto
 ddp_local_rank: 0 # -1 means auto
 enable_rewrite_output_dir: True
-output_dir: '/home/ubuntu/Desktop/mydata/output/p2_ded_bead_profile/v4.4'
+output_dir: 'C:\mydata\output\p2_ded_bead_profile\v5.0'
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'sample_200.enc_200.dec_100.pool_200.dec_lstm.schedule_ep_20.lr_1.2e-4_0.985.wd_1e-4.mix_loss'
+extra_name: 'sample_200.enc_200.dec_100.pool_200.dec_lstm.no_auto_reg.lr_1.2e-4_0.985'
 enable_computational_test: False
 
 # Data
-dataset_dir: '/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile/20240730'
+dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
 ## Dataset
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
@@ -51,9 +51,9 @@ pos_start_idx: 0
 pos_size: 15 # time, position, distance
 ## Feature / Output
 enable_standardization: False # not supported
-output_start_index: 13
-output_size: 40
-output_noise_cutoff: 0.01
+label_start_index: 13
+label_size: 40
+label_noise_cutoff: 0.01
 
 # Model
 model: "STEN_GP_FFD_BLSTM"  # None, STEN_GP_FA_TA, STEN_GP_FFD, STEN_GP_TA_FFD, STEN_GP_FFD_TA, STEN_GP_FFD_BLSTM
@@ -78,21 +78,27 @@ enable_layer_norm: True
 enable_dropout: True
 dropout: 0.3
 ## decoder
-decoder_option: 'transformer'
+decoder_option: 'default' # 'transformer'
 output_option: 'Profile40' #'WHA', 'W4HA',
+output_size: 40
 output_embed_dim: 6
+## adaptor
+enable_adaptor: False
+adaptor_option: 'GMM3' # 'None', 'Fourier3', 'Sigmoid6'
+adaptor_component_size: 10
 
 # Training
-# Scheduled sampling
-enable_scheduled_sampling: True
+## Scheduled sampling
+enable_scheduled_sampling: False
 scheduled_sampling_max_epoch: 20
-# criterion
+## criterion
 criterion_option: 'mae_mse_iou' # 'mse', 'iou', 'mse_iou', 'mae_mse_iou'
-criterion_mae_lambda: 0.1
-criterion_mse_lambda: 0.8
+criterion_mae_lambda: 0.2
+criterion_mse_lambda: 0.7
 criterion_iou_lambda: 0.1
-# optimizer
-num_epochs: 80
+enable_early_stopping: False
+## optimizer
+num_epochs: 200
 optimizer_option: 'adam_Vaswani_2017' # adam
 lr: 1.2e-4  # learning rate 1.0e-4
 enable_weight_decay: True
@@ -100,8 +106,6 @@ wd: 1.0e-4  # weight decay
 enable_adaptive_lr: True
 lr_gamma: 0.985  # lr reduction factor for each epoch 0.985, 0.96
 lr_adaptive_max_epoch: 1000
-# cross-validation
-early_stopping: False
 
 # Checkpoint
 checkpoint_dir: './'

@@ -288,7 +288,7 @@ def setup_dir(config):
 
         # Get the high resolution performance counter of CPU
         high_prec_time = time.perf_counter()
-        decimal_part = f"{high_prec_time - int(high_prec_time):.8f}".split('.')[1]
+        decimal_part = f"{high_prec_time - int(high_prec_time):.4f}".split('.')[1]
         task_name = f"{curr_time_to_str()}.{decimal_part}"
 
     else:
