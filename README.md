@@ -6,7 +6,7 @@ The input is co-axial images, parameter, timestamp, etc. And the output is WHA, 
 ## Requirement
 The python version is `Python 3.11`
 ```shell
-pip install argparse pyyaml numpy pandas torch torchvision tensorboard tqdm
+pip install pyyaml numpy pandas torch torchvision tensorboard tqdm
 ```
 
 
@@ -36,6 +36,8 @@ output/
 └── checkpoints/
     └── (saved models)
 ```
+
+## Data
 Please contact authors for dataset.
 Note that pre-processed data is used to increase time efficiency in training.
 
@@ -60,7 +62,7 @@ python delay_run.py
 
 To view training results on tensorboard (adjust path accordingly):
 ```shell
-tensorboard --logdir=C:\mydata\output\p2_ded_bead_profile\v4.3
+tensorboard --logdir=C:\mydata\output\p2_ded_bead_profile\v3.3
 ```
 
 To apply filters on tensorboard using regex
