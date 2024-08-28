@@ -43,7 +43,6 @@ class MyDataset(Dataset):
             data_tensor = torch.load(dataset_path, weights_only=True)
 
         self.data_tensor = data_tensor  # into memory (not gpu memory)
-        self.param_index_lf = config.img_start_idx + config.img_embed_dim
 
         idx_lf, idx_rt = config.img_start_idx, config.img_start_idx + config.img_embed_dim
         self.data_img = data_tensor[:, idx_lf:idx_rt].to(config.device)
@@ -68,6 +67,8 @@ class MyDataset(Dataset):
             raise RuntimeError("self.n_seq != self.n_seq_before + self.n_seq_after + 1")
 
         self.n_seq_dec_pool = config.n_seq_dec_pool
+        if self.n_seq_dec_pool < 1:
+            raise RuntimeError("self.n_seq_dec_pool < 1")
 
         '''Mask data'''
         # last column: mask for valid profiles
@@ -83,12 +84,12 @@ class MyDataset(Dataset):
             data_mask = valid_data_mask
 
         self.raw_data_index = (data_mask[self.n_seq_enc_look_back:
-                                         -1 - self.n_seq_enc_look_ahead - self.n_seq_dec_pool]
+                                         len(data_mask) - self.n_seq_enc_look_ahead - (self.n_seq_dec_pool-1)]
                                .nonzero().squeeze())
         self.raw_data_index += self.n_seq_enc_look_back
         self.data_len = len(self.raw_data_index)
 
-        ''' Use stride for sub-sampling '''
+        ''' Sub-sampling '''
         self.sys_sampling_interval = config.sys_sampling_interval
         self.data_len = self.data_len // self.sys_sampling_interval
 
@@ -99,7 +100,7 @@ class MyDataset(Dataset):
         raw_index = index * self.sys_sampling_interval
         idx_ego = self.raw_data_index[raw_index]
         idx_lf = idx_ego - self.n_seq_enc_look_back
-        idx_rt = idx_ego + self.n_seq_enc_look_ahead + self.n_seq_dec_pool + 1
+        idx_rt = idx_ego + self.n_seq_enc_look_ahead + self.n_seq_dec_pool
         return (index,
                 self.data_img[idx_lf: idx_rt],
                 self.data_param[idx_lf: idx_rt],

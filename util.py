@@ -261,7 +261,7 @@ def backup_config(config):
 
     # Save the dictionary to a YAML file
     save_config(config, output_file_path)
-    print(f"> config backup: {output_file_path}")
+    # print(f"> config backup: {output_file_path}")
 
 
 # prep all dir
@@ -319,7 +319,7 @@ def setup_dir(config):
             print("! output_dir removed:\t", os.path.abspath(config.output_dir))
 
     os.makedirs(config.output_dir, exist_ok=True)
-    print("> output_dir:\t", os.path.abspath(config.output_dir))
+    print("> output_dir: ", os.path.abspath(config.output_dir))
 
     config.log_dir = config.output_dir + config.log_dir
     os.makedirs(config.log_dir, exist_ok=True)
