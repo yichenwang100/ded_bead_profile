@@ -11,6 +11,10 @@ def train(config):
     # set up dir
     setup_dir(config)
 
+    # Set up random seed
+    if config.enable_seed:
+        seed_everything(seed=config.seed)
+
     # set up ddp
     if 'enable_ddp' in config and config.enable_ddp:
         ddp_setup(config)
@@ -36,10 +40,6 @@ def train(config):
     if config.enable_save_history_stats_to_csv:
         column_header = ['epoch', 'elapsed_t', 'lr', 'train_loss', 'val_loss', 'train_iou', 'val_iou', 'extra']
         history_stats_df = pd.DataFrame(columns=column_header)
-
-    # Set up random seed
-    if config.enable_seed:
-        seed_everything(seed=config.seed)
 
     # Training loop starts
     print('\n> Training Loop Starts...')
