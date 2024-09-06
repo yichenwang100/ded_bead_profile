@@ -72,18 +72,30 @@ class MyInputEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        embed_dim = (config.img_embed_dim +
-                     config.param_embed_dim * config.param_size +
-                     config.pos_embed_dim * config.pos_size)
-        if embed_dim != config.embed_dim:
-            raise RuntimeError(f"calculated embed_dim({embed_dim}) != config.embed_dim({config.embed_dim})")
+        self.hidden_dim = 0
 
-        self.param_embed = MyEmbeddingBlock(config.param_size, config.param_embed_dim, config.feature_embed_option)
-        self.pos_embed = MyEmbeddingBlock(config.pos_size, config.pos_embed_dim, config.feature_embed_option)
+        self.enable_img_embed = config.enable_img_embed
+        if self.enable_img_embed:
+            self.hidden_dim += config.img_embed_dim * 1
+
+        self.enable_param_embed = config.enable_param_embed
+        if self.enable_param_embed:
+            self.hidden_dim += config.param_embed_dim * config.param_size
+            self.param_embed = MyEmbeddingBlock(config.param_size, config.param_embed_dim, config.feature_embed_option)
+
+        self.enable_pos_embed = config.enable_pos_embed
+        if self.enable_pos_embed:
+            self.hidden_dim += config.pos_embed_dim * config.pos_size
+            self.pos_embed = MyEmbeddingBlock(config.pos_size, config.pos_embed_dim, config.feature_embed_option)
+
+        print(f'> MyInputEmbedding: hidden_dim = {self.hidden_dim}')
+        config.embed_dim = self.hidden_dim
+
 
     def forward(self, x_img, x_param, x_pos):
-        x_param = self.param_embed(x_param)
-        x_pos = self.pos_embed(x_pos)
+        x_img = x_img if self.enable_img_embed else torch.tensor([], device=x_img.device)
+        x_param = self.param_embed(x_param) if self.enable_param_embed else torch.tensor([], device=x_param.device)
+        x_pos = self.pos_embed(x_pos) if self.enable_pos_embed else torch.tensor([], device=x_pos.device)
         x = torch.cat((x_img, x_param, x_pos), dim=2)
         return x  # (B, N, H_b)
 
@@ -239,34 +251,35 @@ class MyFeedForwardBlock(nn.Module):
 
 
 class MyEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, hidden_dim):
         super().__init__()
+        self.hidden_dim = hidden_dim
 
         layers = []
         if config.model == 'STEN_GP_FFD_BLSTM':
             for _ in range(config.encoder_layer_size):
-                layers.append(MyFeedForwardBlock(config, config.embed_dim))
-                layers.append(MyBiLSTMBlock(config, config.embed_dim))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
+                layers.append(MyBiLSTMBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FFD_TA':
             for _ in range(config.encoder_layer_size):
-                layers.append(MyFeedForwardBlock(config, config.embed_dim))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
                 layers.append(MyTemporalAttnBlock(config))
         elif config.model == 'STEN_GP_TA_FFD':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyTemporalAttnBlock(config))
-                layers.append(MyFeedForwardBlock(config, config.embed_dim))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FA_TA':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeatureAttnBlock(config))
                 layers.append(MyTemporalAttnBlock(config))
         elif config.model == 'STEN_GP_FFD':
             for _ in range(config.encoder_layer_size):
-                layers.append(MyFeedForwardBlock(config, config.embed_dim))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
         else:  # default setup
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeatureAttnBlock(config))
                 layers.append(MyTemporalAttnBlock(config))
-                layers.append(MyFeedForwardBlock(config, config.embed_dim))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
 
         self.encoder = nn.Sequential(*layers)
 
@@ -341,7 +354,8 @@ class MyModel(nn.Module):
         super().__init__()
 
         self.embedding = MyInputEmbedding(config)
-        self.encoder = MyEncoder(config)
+        self.hidden_dim = self.embedding.hidden_dim
+        self.encoder = MyEncoder(config, self.hidden_dim)
         if 'decoder_option' in config and config.decoder_option == 'transformer':
             self.decoder = MyDecoderPlus(config)
             self.enable_auto_regression = True
@@ -406,10 +420,10 @@ class MyAdaptor(nn.Module):
         # param[:, :, 1]: steepness
         # param[:, :, 2]: x shift
         # steepness = torch.clamp(params[:, :, 1], max=50).unsqueeze(-1)  # Prevent overflow in exp
-        y = params[:, :, 0].unsqueeze(-1) * torch.exp(-params[:, :, 1].unsqueeze(-1) * (x - params[:, :, 2].unsqueeze(-1)) ** 2)
+        y = params[:, :, 0].unsqueeze(-1) * torch.exp(
+            -params[:, :, 1].unsqueeze(-1) * (x - params[:, :, 2].unsqueeze(-1)) ** 2)
         y = torch.nan_to_num(y, nan=0.0)  # Replace NaNs with 0
         return y
-
 
     def compute_fourier(self, x, param):
         # param[0]: height
@@ -439,7 +453,6 @@ class MyAdaptor(nn.Module):
         y = torch.nan_to_num(y, nan=0.0)  # Replace NaNs with 0
         return y
 
-
     def compute(self, params):
         params = params.view(params.size(0), self.component_size, 3)
         result = self.method(self.x, params)
@@ -455,7 +468,7 @@ def get_model(config):
         if 'enable_ddp' in config and config.enable_ddp:
             model = torch.nn.parallel.DistributedDataParallel(model,
                                                               device_ids=[config.ddp_local_rank],
-                                                              output_device=config.ddp_local_rank,)
+                                                              output_device=config.ddp_local_rank, )
         else:
             model = nn.DataParallel(model, device_ids=[config.dp_core_idx])
 
@@ -500,7 +513,6 @@ if __name__ == '__main__':
     ENABLE_PROFILING = False
 
     config = load_config()
-
 
     ''' I/O test '''
     # model_names = ['STEN_GP_FFD_TA', 'STEN_GP_FFD_BLSTM']
@@ -590,7 +602,6 @@ if __name__ == '__main__':
                 print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
 
         total_params_list_list.append(total_params_list)
-
 
     for i_list, _param_list in enumerate(total_params_list_list):
         print(f"> param list for H = {H_list[i_list]}: ",

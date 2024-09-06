@@ -266,22 +266,22 @@ def train(config):
 if __name__ == '__main__':
     config_raw = get_config_from_cmd(argparse.ArgumentParser())
 
-    if config_raw.enable_computational_test:
-        model_list = ['CF1X', 'CF2X', 'CSAX', 'CBLX']
-        k_list = [10, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
-        for model in model_list:
-            for k in k_list:
-                print("\n")
-                print('>' * 50)
-                config_train = copy.deepcopy(config_raw)
-                config_train.embed_dim = k
-                config_train.model = model
-                config_train.enable_tensorboard = False
-                config_train.enable_save_best_model = False
-                config_train.enable_save_attention = False
-                print('> embed_dim: ', config_train.embed_dim)
-                print('> target model: ', config_train.model)
-                train(config_train)
-
-    else:
-        train(config_raw)
+    # if config_raw.enable_computational_test:
+    #     model_list = ['CF1X', 'CF2X', 'CSAX', 'CBLX']
+    #     k_list = [10, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
+    #     for model in model_list:
+    #         for k in k_list:
+    #             print("\n")
+    #             print('>' * 50)
+    #             config_train = copy.deepcopy(config_raw)
+    #             config_train.embed_dim = k
+    #             config_train.model = model
+    #             config_train.enable_tensorboard = False
+    #             config_train.enable_save_best_model = False
+    #             config_train.enable_save_attention = False
+    #             print('> embed_dim: ', config_train.embed_dim)
+    #             print('> target model: ', config_train.model)
+    #             train(config_train)
+    #
+    # else:
+    train(config_raw)
