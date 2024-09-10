@@ -14,6 +14,10 @@ def test_trained_model(file_dir):
     # Load configuration
     config = load_config(os.path.join(file_dir, 'config.yaml'))
 
+    # Set the random seed
+    if config.enable_seed:
+        seed_everything(seed=config.seed)
+
     '''temp override'''
     config.enable_save_attention = True
 
@@ -146,9 +150,9 @@ def testify(config, model, adaptor, criterion, dataset, data_loader, test_mode='
 
     enable_auto_regression = config.decoder_option == 'transformer'
 
-    # if config.enable_save_attention:
-    #     feature_attn_sum = torch.zeros((config.embed_dim, config.embed_dim))
-    #     temporal_attn_sum = torch.zeros((config.n_seq_enc_total, config.n_seq_enc_total))
+    if config.enable_save_attention:
+        feature_attn_sum = torch.zeros((config.embed_dim, config.embed_dim))
+        temporal_attn_sum = torch.zeros((config.n_seq_enc_total, config.n_seq_enc_total))
 
     t_start = time.time()
     progress_bar = tqdm(range(len(data_loader)), ncols=100)
@@ -218,9 +222,9 @@ def testify(config, model, adaptor, criterion, dataset, data_loader, test_mode='
     val_loss_mean = val_loss_sum / len_loader
     val_iou_mean = val_iou_sum / len_loader
 
-    # if config.enable_save_attention:
-    #     feature_attn_mean = feature_attn_sum / len_loader
-    #     temporal_attn_mean = temporal_attn_sum / len_loader
+    if config.enable_save_attention:
+        feature_attn_mean = feature_attn_sum / len_loader
+        temporal_attn_mean = temporal_attn_sum / len_loader
 
     ''' Save Results '''
     ''' save stats fro best model '''
@@ -236,9 +240,9 @@ def testify(config, model, adaptor, criterion, dataset, data_loader, test_mode='
     stats_df.to_csv(os.path.join(config.output_dir, f"best_model_stats.{test_mode}.{extra_name}.csv"), index=False)
 
     ''' Save attention map '''
-    # if config.enable_save_attention:
-    #     torch.save(feature_attn_mean, os.path.join(config.output_dir, "feature_attn_mean.pth"))
-    #     torch.save(temporal_attn_mean, os.path.join(config.output_dir, "temporal_attn_mean.pth"))
+    if config.enable_save_attention:
+        torch.save(feature_attn_mean, os.path.join(config.output_dir, "feature_attn_mean.pth"))
+        torch.save(temporal_attn_mean, os.path.join(config.output_dir, "temporal_attn_mean.pth"))
 
     # save results
     val_results = torch.cat((val_raw_data_history,
