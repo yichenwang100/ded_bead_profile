@@ -148,7 +148,7 @@ def testify(config, model, adaptor, criterion, dataset, data_loader, test_mode='
     val_y_pred_history = torch.zeros_like(val_y_true_history)
     y_noise_cutoff = config.label_noise_cutoff
 
-    enable_auto_regression = config.decoder_option == 'transformer'
+    enable_auto_regression = (config.decoder_option == 'transformer')
 
     if config.enable_save_attention:
         feature_attn_sum = torch.zeros((config.embed_dim, config.embed_dim))

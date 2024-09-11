@@ -4,7 +4,6 @@ import argparse, yaml
 from pprint import pprint
 from datetime import datetime
 
-
 '''***********************************************************************'''
 ''' Torch and tensor'''
 '''***********************************************************************'''
@@ -14,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+
 
 # seed os, random, numpy, torch, etc.
 def seed_everything(seed=42):
@@ -103,20 +103,16 @@ def init_model_weights(m):
         torch.nn.init.uniform_(m, a=0.0, b=1.0)
 
 
-def ddp_setup(config):
-    if config.ddp_local_rank < 0:
-        config.ddp_local_rank = 0
-
-    if config.ddp_world_size < 0:
-        config.ddp_world_size = torch.cuda.device_count()
-
+def ddp_setup(local_rank, world_size):
     dist.init_process_group('ncll',
                             init_method='env://',
-                            rank=config.ddp_local_rank,
-                            world_size=config.ddp_world_size)
+                            rank=local_rank,
+                            world_size=world_size)
+
 
 def ddp_cleanup():
     dist.destroy_process_group()
+
 
 '''***********************************************************************'''
 '''Formatting and displaying '''
@@ -181,29 +177,11 @@ class AttributeDict(dict):
         return new_dict
 
 
-def config_setup_device(config):
-    if config.enable_gpu and torch.cuda.is_available():
-        dev_name = "cuda"
-
-        if 'dp_core_idx' in config and config.dp_core_idx > 0:
-            dev_name = f'cuda:{config.dp_core_idx}'
-        else:
-            config.dp_core_idx = 0
-
-    else:
-        dev_name = "cpu"
-    config.device = torch.device(dev_name)
-
-    return config
-
 # load config by its file name
 def load_config(config_path='config.yaml'):
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
         config = AttributeDict(config)
-
-        config = config_setup_device(config)
-
         return config
 
 
@@ -212,6 +190,15 @@ def save_config(config, config_path='config.yaml'):
         config_save = copy.deepcopy(dict(config))
         config_save["device"] = None
         yaml.dump(config_save, file)
+
+
+def merge_dicts(dict1, dict2):
+    """Recursively merge two dictionaries."""
+    for key, value in dict2.items():
+        if key in dict1 and isinstance(dict1[key], dict) and isinstance(value, dict):
+            merge_dicts(dict1[key], value)
+        else:
+            dict1[key] = value
 
 
 # convert config with parser of args from the shell command
@@ -255,18 +242,21 @@ def get_config_from_cmd(parser):
     return proj_config
 
 
-# backup the config to output folder
-def backup_config(config):
-    output_file_path = os.path.join(config.output_dir, 'config.yaml')
+# prep all local-machine related dir, naming, etc.
+def setup_local_config(config):
+    ''' setup the basic environment from config
+    - machine/hardware setup
+    - project naming
+    - disk directory
+    - gpu and multi tasking
+    - backup config files
+    '''
 
-    # Save the dictionary to a YAML file
-    save_config(config, output_file_path)
-    # print(f"> config backup: {output_file_path}")
+    ''' load machine.config '''
+    machine_config = load_config(config.machine_config_path)
+    merge_dicts(config, machine_config)
 
-
-# prep all dir
-def setup_dir(config):
-
+    ''' project naming '''
     if config.enable_uuid_naming:
         # get a shortened UUID
         # def get_uuid(length=-1):
@@ -305,29 +295,62 @@ def setup_dir(config):
             task_name += f" drop={config.dropout}"
 
     task_name += f".{config.extra_name}" if config.extra_name is not None else ""
-    config.output_dir = config.output_dir + '/' + task_name + '/'
-
     print("> task_name: ", task_name)
-    print("> dataset_dir: ", os.path.abspath(config.dataset_dir))
-    # print("> dataset_path: ", os.path.abspath(os.path.join(config.dataset_dir, config.dataset_name)))
 
-    # remove the project dir if it exists
-    if config.enable_rewrite_output_dir:
-        if os.path.exists(config.output_dir):
-            shutil.rmtree(config.output_dir)
+    ''' disk directory '''
+    # dataset
+    config.machine_dataset_dir = os.path.join(config.data_root_dir, config.dataset_dir)
+    print("> machine_dataset_dir: ", os.path.abspath(config.machine_dataset_dir))
+
+    # output
+    config.machine_output_dir = os.path.join(config.data_root_dir, config.output_dir, task_name)
+
+    if config.enable_rewrite_output_dir:  # remove the project dir if it exists
+        if os.path.exists(config.machine_output_dir):
+            shutil.rmtree(config.machine_output_dir)
             time.sleep(0.2)
-            print("! output_dir removed:\t", os.path.abspath(config.output_dir))
+            print("! machine_output_dir removed:\t", os.path.abspath(config.machine_output_dir))
 
-    os.makedirs(config.output_dir, exist_ok=True)
-    print("> output_dir: ", os.path.abspath(config.output_dir))
+    os.makedirs(config.machine_output_dir, exist_ok=True)
+    print("> machine_output_dir: ", os.path.abspath(config.machine_output_dir))
 
-    config.log_dir = config.output_dir + config.log_dir
-    os.makedirs(config.log_dir, exist_ok=True)
-    # print("> log_dir:\t", os.path.abspath(config.log_dir))
+    # log
+    config.machine_log_dir = os.path.join(config.machine_output_dir, config.log_dir)
+    os.makedirs(config.machine_log_dir, exist_ok=True)
+    # print("> machine_log_dir:\t", os.path.abspath(config.machine_log_dir))
 
-    config.checkpoint_dir = config.output_dir + config.checkpoint_dir
-    os.makedirs(config.checkpoint_dir, exist_ok=True)
-    # print("> checkpoint_dir: ", os.path.abspath(config.checkpoint_dir))  # prep all dir
+    # check point
+    config.machine_checkpoint_dir = os.path.join(config.machine_output_dir, config.checkpoint_dir)
+    os.makedirs(config.machine_checkpoint_dir, exist_ok=True)
+    # print("> machine_checkpoint_dir: ", os.path.abspath(config.machine_checkpoint_dir))  # prep all dir
+
+    ''' GPU and device setting '''
+    if config.enable_gpu and torch.cuda.is_available():
+        dev_name = "cuda"
+
+        if 'dp_core_idx' in config and config.dp_core_idx > 0:
+            dev_name = f'cuda:{config.dp_core_idx}'
+        else:
+            config.dp_core_idx = 0
+
+    else:
+        dev_name = "cpu"
+    config.device = torch.device(dev_name)
+
+    # set up ddp
+    if 'enable_ddp' in config and config.enable_ddp:
+        ddp_cleanup()
+
+        if config.ddp_local_rank < 0:
+            config.ddp_local_rank = 0
+
+        if config.ddp_world_size < 0:
+            config.ddp_world_size = torch.cuda.device_count()
+
+        ddp_setup(local_rank=config.ddp_local_rank, world_size=config.ddp_world_size)
+
+    ''' Backup config to output dir '''
+    save_config(config, os.path.join(config.machine_output_dir, 'config.yaml'))
 
 
 def test_load_config():
@@ -384,73 +407,6 @@ def compute_iou(y_pred, y_true, noise_cutoff=0, eps=1e-6):
     iou = (intersection_area + eps) / (total_area + eps)
     return iou
 
-
-'''***********************************************************************'''
-'''Project related settings'''
-'''***********************************************************************'''
-
-param_str_list = [
-    "EXP_ID",
-    "POINT_ID",
-    "FREQUENCY",
-    "POWER_PATTERN",
-    "FEEDRATE_PATTERN",
-    "LINEIDX",
-    "RTCP",
-    "CLOCKWISE",
-    "CURVATURE",
-    "POWER",
-    "FEEDRATE",
-    "POWER_DIFF",
-    "FEEDRATE_DIFF"
-]
-
-
-def param_id_to_str(id):
-    return param_str_list[id]
-
-
-pos_str_list = [
-    "DISTANCE",
-    "TIME",
-    "AXIS_X",
-    "AXIS_Y",
-    "WCS_AXIS_X",
-    "WCS_AXIS_Y",
-    "AXIS_C",
-    "VEL_X",
-    "VEL_Y",
-    "VEL_C",
-    "ANGLE_WCS_AXIS",
-    "ANGLE_AXIS",
-    "ACC_X",
-    "ACC_Y",
-    "ACC_C"
-]
-
-
-def pos_id_to_str(id):
-    return pos_str_list[id]
-
-
-excel_headers = [
-    "EXP_ID", "POINT_ID",
-    "FREQUENCY", "POWER_PATTERN", "FEEDRATE_PATTERN", "LINEIDX",
-    "RTCP", "CLOCKWISE", "CURVATURE",
-    "POWER", "FEEDRATE", "POWER_DIFF", "FEEDRATE_DIFF",
-
-    "DISTANCE", "TIME",
-    "AXIS_X", "AXIS_Y", "WCS_AXIS_X",
-    "WCS_AXIS_Y", "AXIS_C", "VEL_X",
-    "VEL_Y", "VEL_C",
-    "ANGLE_WCS_AXIS", "ANGLE_AXIS",
-    "ACC_X", "ACC_Y", "ACC_C",
-
-    "W1", "W2", "W3", "W4", "H", "A",
-    "SIG_PARA1", "SIG_PARA2", "SIG_PARA3", "SIG_PARA4", "SIG_PARA5", "SIG_PARA6", "SIG_PARA7",
-
-    "REAL_PROFILE"
-]
 
 if __name__ == '__main__':
     # test config loading

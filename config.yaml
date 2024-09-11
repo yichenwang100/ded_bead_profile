@@ -3,6 +3,7 @@
 
 # Global setting
 config_path: 'config.yaml'
+machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
@@ -11,18 +12,18 @@ enable_ddp: False  # DDP (DistributedDataParallel), enable this will disable 'DP
 ddp_world_size: 2 # -1 means auto
 ddp_local_rank: 0 # -1 means auto
 enable_rewrite_output_dir: True
-output_dir: 'C:\mydata\output\p2_ded_bead_profile\v7.0'
+output_dir: './output/p2_ded_bead_profile/v8.0'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'no_pos.sample_1.enc_200.dec_100.pool_1.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812.data_0730'
+extra_name: 'no_pos.sample_10.enc_200.dec_100.pool_1.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
 enable_computational_test: False
 
 # Data
-dataset_dir: 'C:\mydata\dataset\p2_ded_bead_profile\20240730'
+dataset_dir: './dataset/p2_ded_bead_profile/20240911'  # relative to data_root_dir
 ## Dataset
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
 dataset_iterate_ratio: 1.0 # use only portion of the dataset
-sys_sampling_interval: 1  # systematic sampling interval <--------------------------------------------
+sys_sampling_interval: 10  # systematic sampling interval <--------------------------------------------
 raw_timestamp_interval: 2.5  # ms
 raw_data_size: 121
 ## Data loader
@@ -52,8 +53,8 @@ pos_start_idx: 0
 pos_size: 15 # time, position, distance
 ## Feature / Output
 enable_standardization: False # not supported
-label_start_index: 53 # 6 for WHA, 7 for Sigmoid param, the rest for cropped data (53 for data 0730, 13+ for 0823)
-label_crop_size: 40  # crop from the original 600 points
+label_start_index: 13 # 6 for WHA, 7 for Sigmoid param, the rest for cropped data (53 for data 0730, 13+ for 0823/later)
+label_crop_size: 400  # crop from the original 600 points
 label_size: 40
 label_noise_cutoff: 0.01
 
@@ -71,7 +72,8 @@ img_embed_dim: 512    # number of conv. feature
 enable_param_embed: True  # --- ABLATION
 param_embed_dim: 6
 ## embedding / Positional
-enable_pos_embed: Pos  # --- ABLATION
+enable_pos_embed: False  # --- ABLATION
+pos_embed_exclude: None
 pos_embed_dim: 6
 ## encoder
 encoder_layer_size: 1   # --- ABLATION
@@ -110,12 +112,12 @@ lr_gamma: 0.985  # lr reduction factor for each epoch 0.985, 0.96
 lr_adaptive_max_epoch: 1000
 
 # Checkpoint
-checkpoint_dir: './'
+checkpoint_dir: './'  # relative to output_dir
 enable_save_best_model: True
 checkpoint_epoch_interval: 5
 
 # Log
-log_dir: 'logs/'
+log_dir: './logs/'  # relative to output_dir
 enable_tensorboard: True
 enable_save_history_stats_to_csv: True
 enable_save_attention: False

@@ -1,0 +1,12 @@
+# machine.yaml
+# This file contains the local machine properties
+
+# Machine info
+machine_name: 'office-dev0-win11'
+os_name: 'win11'
+location: 'hkust-gz-office'
+
+# Local file path
+data_root_dir: 'C:/mydata'
+
+# GPU setting

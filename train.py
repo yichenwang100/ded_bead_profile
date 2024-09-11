@@ -9,15 +9,11 @@ from tqdm import tqdm
 
 def train(config):
     # set up dir
-    setup_dir(config)
+    setup_local_config(config)
 
     # Set up random seed
     if config.enable_seed:
         seed_everything(seed=config.seed)
-
-    # set up ddp
-    if 'enable_ddp' in config and config.enable_ddp:
-        ddp_setup(config)
 
     # Prepare data
     dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
@@ -26,15 +22,12 @@ def train(config):
 
     # Set up model, loss function, optimizer, and scheduler for adaptive lr
     model, adaptor, criterion, optimizer, scheduler = get_model(config)
-    enable_auto_regression = config.decoder_option == 'transformer'
-
-    # Backup config to output dir
-    backup_config(config)
+    enable_auto_regression = (config.decoder_option == 'transformer')
 
     # Create logger using tensorboard
     if config.enable_tensorboard:
         from torch.utils.tensorboard import SummaryWriter
-        logger = SummaryWriter(config.log_dir)
+        logger = SummaryWriter(config.machine_log_dir)
 
     # Create logger using pandas.dataframe and csv
     if config.enable_save_history_stats_to_csv:
@@ -233,7 +226,7 @@ def train(config):
             history_stats_df.loc[len(history_stats_df)] = epoch_stats
 
             if epoch % config.checkpoint_epoch_interval == 0 or epoch == num_epochs - 1:
-                history_stats_df.to_csv(f"{config.log_dir}/train_val_stats.csv", index=False)
+                history_stats_df.to_csv(f"{config.machine_log_dir}/train_val_stats.csv", index=False)
 
         if config.enable_save_best_model:
             if val_iou_mean > best_model_metrics:
@@ -243,12 +236,12 @@ def train(config):
 
             if epoch % config.checkpoint_epoch_interval == 0 or epoch == num_epochs - 1:
                 # save model weights
-                torch.save(best_model_wts, f"{config.checkpoint_dir}/best_model_wts.pth")
+                torch.save(best_model_wts, f"{config.machine_checkpoint_dir}/best_model_wts.pth")
 
                 # save stats
                 stats_df = pd.DataFrame(columns=column_header)
                 stats_df.loc[0] = best_model_stats
-                stats_df.to_csv(f"{config.checkpoint_dir}/best_model_stats.csv", index=False)
+                stats_df.to_csv(f"{config.machine_checkpoint_dir}/best_model_stats.csv", index=False)
 
         # Adaptive learning rate
         if config.enable_adaptive_lr and epoch < config.lr_adaptive_max_epoch:
@@ -257,10 +250,6 @@ def train(config):
     # Close the SummaryWriter
     if config.enable_tensorboard:
         logger.close()
-
-    # set up ddp
-    if 'enable_ddp' in config and config.enable_ddp:
-        ddp_cleanup()
 
 
 if __name__ == '__main__':

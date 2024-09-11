@@ -365,35 +365,12 @@ class MyModel(nn.Module):
         self.timing_on = False
 
     def forward(self, x_img, x_param, x_pos, y_prev=None, reset_dec_hx=False):
-        if self.timing_on:
-            time_count = 100
-
-            time_start = time.time()
-            for i in range(time_count):
-                x_embed = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
-            time_embed = time.time()
-
-            for i in range(time_count):
-                x_enc = self.encoder(x_embed)  # (B, N, H_c)
-            time_enc = time.time()
-
-            for i in range(time_count):
-                if self.enable_auto_regression:
-                    x = self.decoder(x_enc, y_prev)  # (B, N, output_size)
-                else:
-                    x = self.decoder(x_enc)
-            time_dec = time.time()
-            print(f'> model timing: ')
-            print(f'time_embed_elapsed, {(time_embed - time_start) / time_count * 1e6:.3f}us')
-            print(f'time_enc_elapsed, {(time_enc - time_embed) / time_count * 1e6:.3f}us')
-            print(f'time_dec_elapsed, {(time_dec - time_enc) / time_count * 1e6:.3f}us')
+        x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
+        x = self.encoder(x)  # (B, N, H_c)
+        if self.enable_auto_regression:
+            x = self.decoder(x, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
         else:
-            x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
-            x = self.encoder(x)  # (B, N, H_c)
-            if self.enable_auto_regression:
-                x = self.decoder(x, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
-            else:
-                x = self.decoder(x)
+            x = self.decoder(x)
         return x
 
 

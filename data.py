@@ -14,6 +14,77 @@ import matplotlib.pyplot as plt
 
 from util import *
 
+'''***********************************************************************'''
+'''Project related settings'''
+'''***********************************************************************'''
+
+param_str_list = [
+    "EXP_ID",
+    "POINT_ID",
+    "FREQUENCY",
+    "POWER_PATTERN",
+    "FEEDRATE_PATTERN",
+    "LINEIDX",
+    "RTCP",
+    "CLOCKWISE",
+    "CURVATURE",
+    "POWER",
+    "FEEDRATE",
+    "POWER_DIFF",
+    "FEEDRATE_DIFF"
+]
+
+
+def param_id_to_str(id):
+    return param_str_list[id]
+
+
+pos_str_list = [
+    "DISTANCE",
+    "TIME",
+    "AXIS_X",
+    "AXIS_Y",
+    "WCS_AXIS_X",
+    "WCS_AXIS_Y",
+    "AXIS_C",
+    "VEL_X",
+    "VEL_Y",
+    "VEL_C",
+    "ANGLE_WCS_AXIS",
+    "ANGLE_AXIS",
+    "ACC_X",
+    "ACC_Y",
+    "ACC_C"
+]
+
+
+def pos_id_to_str(id):
+    return pos_str_list[id]
+
+
+excel_headers = [
+    "EXP_ID", "POINT_ID",
+    "FREQUENCY", "POWER_PATTERN", "FEEDRATE_PATTERN", "LINEIDX",
+    "RTCP", "CLOCKWISE", "CURVATURE",
+    "POWER", "FEEDRATE", "POWER_DIFF", "FEEDRATE_DIFF",
+
+    "DISTANCE", "TIME",
+    "AXIS_X", "AXIS_Y", "WCS_AXIS_X",
+    "WCS_AXIS_Y", "AXIS_C", "VEL_X",
+    "VEL_Y", "VEL_C",
+    "ANGLE_WCS_AXIS", "ANGLE_AXIS",
+    "ACC_X", "ACC_Y", "ACC_C",
+
+    "W1", "W2", "W3", "W4", "H", "A",
+    "SIG_PARA1", "SIG_PARA2", "SIG_PARA3", "SIG_PARA4", "SIG_PARA5", "SIG_PARA6", "SIG_PARA7",
+
+    "REAL_PROFILE"
+]
+
+'''***********************************************************************'''
+'''Dataset and Dataloader'''
+'''***********************************************************************'''
+
 ''' 
 Dataset Decomposition (Total: M+N dataset)
  - Development (M dataset)
@@ -39,7 +110,7 @@ class MyDataset(Dataset):
                                + config.label_size + 1)  # last 1 for mask
             data_tensor = torch.randn((9999, data_hidden_dim))
         else:
-            dataset_path = os.path.join(config.dataset_dir, config.dataset_name)
+            dataset_path = os.path.join(config.machine_dataset_dir, config.dataset_name)
             data_tensor = torch.load(dataset_path, weights_only=True)
 
         self.data_tensor = data_tensor  # into memory (not gpu memory)
@@ -117,13 +188,13 @@ class MyCombinedDataset(Dataset):
     def __init__(self, config):
         if not config.enable_deploy_dataset:
             # iterate all dataset in the folder
-            file_list = [file for file in os.listdir(config.dataset_dir)
+            file_list = [file for file in os.listdir(config.machine_dataset_dir)
                          if file.endswith('.pt')
                          and file not in config.dataset_exclude]
             file_num = int(len(file_list) * config.dataset_iterate_ratio)
             file_list = file_list[:file_num]
         else:
-            file_list = [file for file in os.listdir(config.dataset_dir)
+            file_list = [file for file in os.listdir(config.machine_dataset_dir)
                          if file.endswith('.pt')
                          and file in config.dataset_exclude]
             file_num = len(file_list)
@@ -310,14 +381,15 @@ def calculate_statistics(csv_path):
         else:
             total_count = len(df[col])
             zero_count = (df[col] == 0).sum()
+            precision = 5
             stats[col] = {
-                'mean': round(df[col].mean(), 5),
-                'median': round(df[col].median(), 5),
-                'std': round(df[col].std(), 5),
-                'min': round(df[col].min(), 5),
-                'max': round(df[col].max(), 5),
+                'mean': round(df[col].mean(), precision),
+                'median': round(df[col].median(), precision),
+                'std': round(df[col].std(), precision),
+                'min': round(df[col].min(), precision),
+                'max': round(df[col].max(), precision),
                 'num_zeros': zero_count,
-                'pct_zeros': round((zero_count / total_count) * 100, 5),
+                'pct_zeros': round((zero_count / total_count) * 100, precision),
                 'num_negative': (df[col] < 0).sum(),
                 'num_positive': (df[col] > 0).sum()
             }
@@ -482,8 +554,8 @@ if __name__ == '__main__':
     # test_dataset()
     #
     img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240823'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240823'
+    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240911'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240911'
     # convert_xlsx_to_csv(data_root_dir)
     # compute_stats_for_all_csv(data_root_dir)
     # create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
