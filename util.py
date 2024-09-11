@@ -102,6 +102,20 @@ def init_model_weights(m):
     elif isinstance(m, nn.Parameter):
         torch.nn.init.uniform_(m, a=0.0, b=1.0)
 
+import subprocess
+def get_gpu_memory():
+    # Using `nvidia-smi` to get the memory usage of GPUs
+    result = subprocess.check_output(
+        ['nvidia-smi', '--query-gpu=memory.used,memory.total', '--format=csv,nounits,noheader'], encoding='utf-8'
+    )
+    gpu_memory = [tuple(map(int, x.split(', '))) for x in result.strip().split('\n')]
+    return gpu_memory
+
+def get_least_used_gpu():
+    gpu_memory = get_gpu_memory()
+    gpu_memory_usage = [used/total for used, total in gpu_memory]
+    least_used_gpu = gpu_memory_usage.index(min(gpu_memory_usage))
+    return least_used_gpu
 
 def ddp_setup(local_rank, world_size):
     dist.init_process_group('ncll',
@@ -326,12 +340,11 @@ def setup_local_config(config):
 
     ''' GPU and device setting '''
     if config.enable_gpu and torch.cuda.is_available():
-        dev_name = "cuda"
+        # auto get core index with the min memory used
+        if config.dp_core_idx < 0:
+            config.dp_core_idx = get_least_used_gpu()
 
-        if 'dp_core_idx' in config and config.dp_core_idx > 0:
-            dev_name = f'cuda:{config.dp_core_idx}'
-        else:
-            config.dp_core_idx = 0
+        dev_name = f'cuda:{config.dp_core_idx}'
 
     else:
         dev_name = "cpu"

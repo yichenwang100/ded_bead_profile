@@ -7,23 +7,23 @@ machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_gpu: True
-dp_core_idx: 0
+dp_core_idx: -1 # -1 means auto
 enable_ddp: False  # DDP (DistributedDataParallel), enable this will disable 'DP (Data Parallel)'
 ddp_world_size: 2 # -1 means auto
 ddp_local_rank: 0 # -1 means auto
 enable_rewrite_output_dir: True
 output_dir: './output/p2_ded_bead_profile/v8.0'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'no_pos.sample_10.enc_200.dec_100.pool_1.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
+extra_name: 'sample_1.enc_200.dec_100.pool_1.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
 enable_computational_test: False
 
 # Data
-dataset_dir: './dataset/p2_ded_bead_profile/20240911'  # relative to data_root_dir
+dataset_dir: './dataset/p2_ded_bead_profile/20240911'
 ## Dataset
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
 dataset_iterate_ratio: 1.0 # use only portion of the dataset
-sys_sampling_interval: 10  # systematic sampling interval <--------------------------------------------
+sys_sampling_interval: 1  # systematic sampling interval <--------------------------------------------
 raw_timestamp_interval: 2.5  # ms
 raw_data_size: 121
 ## Data loader
@@ -72,7 +72,7 @@ img_embed_dim: 512    # number of conv. feature
 enable_param_embed: True  # --- ABLATION
 param_embed_dim: 6
 ## embedding / Positional
-enable_pos_embed: False  # --- ABLATION
+enable_pos_embed: True  # --- ABLATION
 pos_embed_exclude: None
 pos_embed_dim: 6
 ## encoder
