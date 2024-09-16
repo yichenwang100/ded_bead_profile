@@ -10,3 +10,8 @@ location: 'hkust-gz-office'
 data_root_dir: 'C:/mydata'
 
 # GPU setting
+enable_gpu: True
+dp_core_idx: 0 # -1 means auto
+enable_ddp: False  # DDP (DistributedDataParallel), enable this will disable 'DP (Data Parallel)'
+ddp_world_size: 2 # -1 means auto
+ddp_local_rank: 0 # -1 means auto

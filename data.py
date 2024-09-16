@@ -115,7 +115,9 @@ class MyDataset(Dataset):
 
         self.data_tensor = data_tensor  # into memory (not gpu memory)
 
-        idx_lf, idx_rt = config.img_start_idx, config.img_start_idx + config.img_embed_dim
+        idx_lf, idx_rt = 0, 0
+
+        idx_lf, idx_rt = idx_rt + config.img_start_idx, idx_rt + config.img_start_idx + config.img_embed_dim
         self.data_img = data_tensor[:, idx_lf:idx_rt].to(config.device)
 
         idx_lf, idx_rt = idx_rt + config.param_start_idx, idx_rt + config.param_start_idx + config.param_size
@@ -124,8 +126,8 @@ class MyDataset(Dataset):
         idx_lf, idx_rt = idx_rt + config.pos_start_idx, idx_rt + config.pos_start_idx + config.pos_size
         self.data_pos = data_tensor[:, idx_lf:idx_rt].to(config.device)
 
-        idx_lf = idx_rt + config.label_start_index
-        label_index = idx_lf + torch.linspace(0, config.label_crop_size - 1, config.label_size).long()
+        idx_lf, idx_rt = idx_rt + config.label_start_index, idx_rt + config.label_start_index + config.label_crop_size
+        label_index = torch.linspace(idx_lf, idx_rt - 1, config.label_size).long()
         self.data_label = data_tensor[:, label_index].to(config.device)
 
         ''' Get indexable data '''
@@ -181,7 +183,7 @@ class MyDataset(Dataset):
     def get_raw_data(self, index, index_shift):
         raw_index = index * self.sys_sampling_interval
         idx_ego = self.raw_data_index[raw_index].cpu() + index_shift
-        return self.data_tensor[idx_ego, self.param_index_lf:]
+        return self.data_tensor[idx_ego]
 
 
 class MyCombinedDataset(Dataset):

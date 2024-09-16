@@ -6,26 +6,20 @@ config_path: 'config.yaml'
 machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
-enable_gpu: True
-dp_core_idx: -1 # -1 means auto
-enable_ddp: False  # DDP (DistributedDataParallel), enable this will disable 'DP (Data Parallel)'
-ddp_world_size: 2 # -1 means auto
-ddp_local_rank: 0 # -1 means auto
 enable_rewrite_output_dir: True
 output_dir: './output/p2_ded_bead_profile/v8.0'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'sample_1.enc_200.dec_100.pool_1.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
+extra_name: 'rtcp_off.sample_1.enc_200.dec_100.pool_1.label_80.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
 enable_computational_test: False
 
 # Data
-dataset_dir: './dataset/p2_ded_bead_profile/20240911'
+dataset_dir: './dataset/p2_ded_bead_profile/20240911'  # relative to data_root_dir
 ## Dataset
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
 dataset_iterate_ratio: 1.0 # use only portion of the dataset
 sys_sampling_interval: 1  # systematic sampling interval <--------------------------------------------
 raw_timestamp_interval: 2.5  # ms
-raw_data_size: 121
 ## Data loader
 dataset_exclude: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt', 'Low_const_const_1_dataset.pt', 'Low_const_const_2_dataset.pt', 'High_sin_tooth_1_dataset.pt', 'High_sin_tooth_2_dataset.pt'] # used when enable_deploy_dataset == True
 enable_deploy_dataset: False
@@ -33,7 +27,7 @@ train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 64
 num_workers: 0  # no need to set if all data in GPU
 ## Special filter
-enable_rtcp: 'both' # 'on_only', 'off_only' 'both'
+enable_rtcp: 'off_only' # 'on_only', 'off_only' 'both'
 ## Sequence length
 n_seq_enc_look_back: 100
 n_seq_enc_look_ahead: 99
@@ -53,9 +47,9 @@ pos_start_idx: 0
 pos_size: 15 # time, position, distance
 ## Feature / Output
 enable_standardization: False # not supported
-label_start_index: 13 # 6 for WHA, 7 for Sigmoid param, the rest for cropped data (53 for data 0730, 13+ for 0823/later)
-label_crop_size: 400  # crop from the original 600 points
-label_size: 40
+label_start_index: 0 # 6 for WHA, 7 for Sigmoid param, the rest for cropped data (53 for data 0730, 13+ for 0823/later)
+label_crop_size: 6  # crop from the original 600 points
+label_size: 6
 label_noise_cutoff: 0.01
 
 # Model
@@ -84,7 +78,7 @@ enable_dropout: True
 dropout: 0.3
 ## decoder
 decoder_option: 'default' # 'transformer'
-output_size: 40
+output_size: 6
 output_embed_dim: 6
 ## adaptor
 enable_adaptor: False
@@ -98,12 +92,15 @@ scheduled_sampling_max_epoch: 20
 ## criterion
 criterion_option: 'mae_mse_iou' # 'mse', 'iou', 'mse_iou', 'mae_mse_iou'
 criterion_mae_lambda: 0.00
-criterion_mse_lambda: 0.88
-criterion_iou_lambda: 0.12
+criterion_mse_lambda: 1.00
+criterion_iou_lambda: 0.00
 enable_early_stopping: False
+## metric
+metric_option: 'mapa'  # 'mse', 'rmse', 'mape', 'mapa', 'mae', 'miou'
+computation_eps: 1.0e-6
 ## optimizer
 num_epochs: 100
-optimizer_option: 'adam_Vaswani_2017' # adam
+optimizer_option: 'adam_Vaswani_2017' # 'adam', 'adamw', 'adam_Vaswani_2017'
 lr: 1.5e-4  # learning rate 1.0e-4, 1.2e-4
 enable_weight_decay: False
 wd: 1.0e-4  # weight decay

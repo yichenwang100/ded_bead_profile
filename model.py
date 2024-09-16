@@ -4,22 +4,121 @@ import torch.nn.functional as F
 from torchvision.models import resnet18
 from util import *
 
+'''***********************************************************************'''
+''' Loss/criterion, and metrics '''
+'''***********************************************************************'''
 
-class MyIoULoss(nn.Module):
-    def __init__(self, config, smooth=1e-6):
+
+# rmse: root of mean square error
+class MyRmseMetric(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        # self.smooth = smooth
-        self.noise_cutoff = config.label_noise_cutoff
 
     def forward(self, y_pred, y_true):
-        # preds = preds.view(-1)
-        # targets = targets.view(-1)
-        # intersection = (preds * targets).sum()
-        # union = preds.sum() + targets.sum() - intersection
-        # iou = (intersection + self.smooth) / (union + self.smooth)
+        return torch.square(F.mse_loss(y_pred, y_true))
 
-        iou = compute_iou(y_pred, y_true, noise_cutoff=self.noise_cutoff).mean()
-        return 1 - iou
+
+def compute_mape(y_pred, y_true, eps=1e-6):
+    assert y_pred.shape == y_true.shape
+
+    relative_err = torch.abs((y_true - y_pred) / y_true)
+    relative_err[y_true.abs() < eps] = torch.nan
+    return torch.nanmean(relative_err)
+
+
+# mape: mean absolute percentage error
+class MyMapeMetric(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.eps = config.computation_eps
+
+    def forward(self, y_pred, y_true):
+        return compute_mape(y_pred, y_true, self.eps)
+
+
+# mapa: mean absolute percentage accuracy
+class MyMapaMetric(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.eps = config.computation_eps
+
+    def forward(self, y_pred, y_true):
+        return (1 - compute_mape(y_pred, y_true, self.eps))
+
+
+def compute_mae(y_pred, y_true):
+    assert y_pred.shape == y_true.shape
+
+    absolute_err = torch.abs(y_true - y_pred)
+    return torch.nanmean(absolute_err)
+
+
+# mape: mean absolute error
+class MyMaeMetric(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+    def forward(self, y_pred, y_true):
+        return compute_mae(y_pred, y_true)
+
+
+def compute_iou(y_pred, y_true, noise_cutoff=0, eps=1e-6):
+    """
+    Calculate an IoU-like metric for scalar values representing the intersection of the area
+    under the predicted and true curves divided by the union area under the two curves.
+    ---
+    intersection = (preds * targets).sum()
+    union = preds.sum() + targets.sum() - intersection
+    iou = (intersection + self.smooth) / (union + self.smooth)
+    ---
+
+    Parameters:
+    y_true (torch.Tensor): Ground truth values, shape (batch_size, N).
+    y_pred (torch.Tensor): Predicted values, shape (batch_size, N).
+
+    Returns:
+    float: IoU-like metric.
+    """
+    assert y_pred.shape == y_true.shape
+
+    # cutoff noise value
+    y_pred_temp = y_pred.clone().abs()
+    y_true_temp = y_true.clone().abs()
+    y_pred_temp[y_pred_temp < noise_cutoff] = 0
+    y_true_temp[y_true_temp < noise_cutoff] = 0
+
+    # Calculate the intersection area
+    min_values = torch.min(y_true_temp, y_pred_temp)
+    intersection_area = torch.trapz(min_values, dim=1)
+
+    # Calculate the total area under the y_true curve using the trapezoidal rule
+    total_area = (torch.trapz(y_true_temp, dim=1)
+                  + torch.trapz(y_pred_temp, dim=1)
+                  - intersection_area)
+
+    # Compute the IoU-like metric (eps is to avoid dividing by zero)
+    iou = (intersection_area + eps) / (total_area + eps)
+    return iou
+
+
+class MyIouLoss(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.noise_cutoff = config.label_noise_cutoff
+        self.eps = config.computation_eps
+
+    def forward(self, y_pred, y_true):
+        return 1 - compute_iou(y_pred, y_true, noise_cutoff=self.noise_cutoff, eps=self.eps).mean()
+
+
+class MyIouMetric(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.noise_cutoff = config.label_noise_cutoff
+        self.eps = config.computation_eps
+
+    def forward(self, y_pred, y_true):
+        return compute_iou(y_pred, y_true, noise_cutoff=self.noise_cutoff, eps=self.eps).mean()
 
 
 class MyCombinedLoss(nn.Module):
@@ -31,7 +130,7 @@ class MyCombinedLoss(nn.Module):
         self.mse_loss = nn.MSELoss()
         self.mse_loss_lambda = config.criterion_mse_lambda
 
-        self.iou_loss = MyIoULoss(config)
+        self.iou_loss = MyIouLoss(config)
         self.iou_loss_lambda = config.criterion_iou_lambda
 
     def forward(self, y_pred, y_true):
@@ -41,6 +140,11 @@ class MyCombinedLoss(nn.Module):
         return (mae_loss * self.mae_loss_lambda +
                 mse_loss * self.mse_loss_lambda +
                 iou_loss * self.iou_loss_lambda)
+
+
+'''***********************************************************************'''
+''' Model '''
+'''***********************************************************************'''
 
 
 class MyEmbeddingBlock(nn.Module):
@@ -90,7 +194,6 @@ class MyInputEmbedding(nn.Module):
 
         print(f'> MyInputEmbedding: hidden_dim = {self.hidden_dim}')
         config.embed_dim = self.hidden_dim
-
 
     def forward(self, x_img, x_param, x_pos):
         x_img = x_img if self.enable_img_embed else torch.tensor([], device=x_img.device)
@@ -374,6 +477,11 @@ class MyModel(nn.Module):
         return x
 
 
+'''***********************************************************************'''
+''' Adaptor '''
+'''***********************************************************************'''
+
+
 class MyAdaptor(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -437,7 +545,13 @@ class MyAdaptor(nn.Module):
         return result
 
 
+'''***********************************************************************'''
+''' The main function '''
+'''***********************************************************************'''
+
+
 def get_model(config):
+    # model
     model = MyModel(config).to(config.device)
 
     # auto parallel in multiple gpu
@@ -449,27 +563,51 @@ def get_model(config):
         else:
             model = nn.DataParallel(model, device_ids=[config.dp_core_idx])
 
-    if 'enable_param_init' in config and config.enable_param_init:
+    if config.enable_param_init:
         model.apply(init_model_weights)
 
     # adaptor/reconstructor
     adaptor = None
-    if 'enable_adaptor' in config and config.enable_adaptor:
+    if config.enable_adaptor:
         adaptor = MyAdaptor(config).to(config.device)
 
     # criterion
     criterion = None
-    if 'criterion_option' in config and config.criterion_option == 'iou':
-        criterion = MyIoULoss(config)
-    elif 'criterion_option' in config and config.criterion_option == 'mse_iou':
+    if config.criterion_option == 'mse':
+        criterion = nn.MSELoss()
+    elif config.criterion_option == 'iou':
+        criterion = MyIouLoss(config)
+    elif config.criterion_option == 'mse_iou':
         criterion = MyCombinedLoss(config)
-    elif 'criterion_option' in config and config.criterion_option == 'mae_mse_iou':
+    elif config.criterion_option == 'mae_mse_iou':
         criterion = MyCombinedLoss(config)
     else:
-        criterion = nn.MSELoss()
+        raise RuntimeError(f'Criterion option {config.criterion_option} is not supported')
+
+    # metric
+    metric = None
+    if config.metric_option == 'mse':
+        metric = nn.MSELoss()
+    elif config.metric_option == 'rmse':
+        metric = MyRmseMetric(config)
+    elif config.metric_option == 'miou':
+        metric = MyIouMetric(config)
+    elif config.metric_option == 'mape':
+        metric = MyMapeMetric(config)
+    elif config.metric_option == 'mapa':
+        metric = MyMapaMetric(config)
+    elif config.metric_option == 'mae':
+        metric = MyMaeMetric(config)
+    else:
+        raise RuntimeError(f'Metric option {config.metric_option} is not supported')
 
     # optimizer
-    if config.optimizer_option == 'adamw':
+    optimizer = None
+    if config.optimizer_option == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(),
+                                     lr=config.lr,
+                                     weight_decay=config.wd if config.enable_weight_decay else 0)
+    elif config.optimizer_option == 'adamw':
         optimizer = torch.optim.AdamW(model.parameters(),
                                       lr=config.lr,
                                       weight_decay=config.wd if config.enable_weight_decay else 0)
@@ -479,11 +617,12 @@ def get_model(config):
                                       betas=(0.9, 0.98),
                                       weight_decay=config.wd if config.enable_weight_decay else 0)
     else:
-        optimizer = torch.optim.Adam(model.parameters(),
-                                     lr=config.lr,
-                                     weight_decay=config.wd if config.enable_weight_decay else 0)
+        raise RuntimeError(f'optimizer option {config.optimizer_option} is not supported')
+
+    # scheduler
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=config.lr_gamma)
-    return model, adaptor, criterion, optimizer, scheduler
+
+    return model, adaptor, criterion, metric, optimizer, scheduler
 
 
 if __name__ == '__main__':
@@ -534,7 +673,7 @@ if __name__ == '__main__':
             print('>' * 50)
             print('> model: ', model_name)
             config.model = model_name
-            model, _, _, _, _ = get_model(config)
+            model, _, _, _, _, _ = get_model(config)
             total_params = get_model_parameter_num(model)
             total_params_list.append(total_params)
             print('> model param size: ', total_params)

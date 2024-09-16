@@ -191,12 +191,23 @@ class AttributeDict(dict):
         return new_dict
 
 
+def load_attribute_dict(path):
+    with open(path, 'r') as file:
+        attribute_dict = yaml.safe_load(file)
+        return AttributeDict(attribute_dict)
+
+
 # load config by its file name
 def load_config(config_path='config.yaml'):
-    with open(config_path, 'r') as file:
-        config = yaml.safe_load(file)
-        config = AttributeDict(config)
-        return config
+    # load the main config
+    main_config = load_attribute_dict(config_path)
+
+    # load machine.config
+    machine_config = load_attribute_dict(main_config.machine_config_path)
+
+    # merge machine config into the main config
+    merge_dicts(main_config, machine_config)
+    return main_config
 
 
 def save_config(config, config_path='config.yaml'):
@@ -259,16 +270,11 @@ def get_config_from_cmd(parser):
 # prep all local-machine related dir, naming, etc.
 def setup_local_config(config):
     ''' setup the basic environment from config
-    - machine/hardware setup
     - project naming
     - disk directory
     - gpu and multi tasking
     - backup config files
     '''
-
-    ''' load machine.config '''
-    machine_config = load_config(config.machine_config_path)
-    merge_dicts(config, machine_config)
 
     ''' project naming '''
     if config.enable_uuid_naming:
@@ -373,52 +379,15 @@ def test_load_config():
 
 
 '''***********************************************************************'''
-'''Basic math tools'''
+'''Mics tools'''
 '''***********************************************************************'''
-
-
-def compute_ape(y_pred, y_true, eps=1e-6):
-    ape = torch.abs((y_true - y_pred) / y_true) * 100
-    ape[y_true.abs() < eps] = torch.nan
-    ape[(y_pred.abs() < eps) & (y_true.abs() < eps)] = 1
-    if torch.isnan(ape).all():
-        return torch.nan
-    return torch.nanmean(ape)
-
-
-def compute_iou(y_pred, y_true, noise_cutoff=0, eps=1e-6):
-    """
-    Calculate an IoU-like metric for scalar values representing the intersection of the area
-    under the predicted and true curves divided by the union area under the two curves.
-
-    Parameters:
-    y_true (torch.Tensor): Ground truth values, shape (batch_size, N).
-    y_pred (torch.Tensor): Predicted values, shape (batch_size, N).
-
-    Returns:
-    float: IoU-like metric.
-    """
-    # Ensure the input tensors are of the correct shape
-    assert y_pred.shape == y_true.shape
-
-    # cutoff noise value
-    y_pred_temp = y_pred.clone().abs()
-    y_true_temp = y_true.clone().abs()
-    y_pred_temp[y_pred_temp < noise_cutoff] = 0
-    y_true_temp[y_true_temp < noise_cutoff] = 0
-
-    # Calculate the intersection area
-    min_values = torch.min(y_true_temp, y_pred_temp)
-    intersection_area = torch.trapz(min_values, dim=1)
-
-    # Calculate the total area under the y_true curve using the trapezoidal rule
-    total_area = (torch.trapz(y_true_temp, dim=1)
-                  + torch.trapz(y_pred_temp, dim=1)
-                  - intersection_area)
-
-    # Compute the IoU-like metric (eps is to avoid dividing by zero)
-    iou = (intersection_area + eps) / (total_area + eps)
-    return iou
+import shutil
+def copy_folder(src, dst):
+    try:
+        shutil.copytree(src, dst)
+        print(f"Folder '{src}' copied to '{dst}' successfully.")
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 if __name__ == '__main__':
