@@ -273,7 +273,6 @@ def setup_local_config(config):
     - project naming
     - disk directory
     - gpu and multi tasking
-    - backup config files
     '''
 
     ''' project naming '''
@@ -354,7 +353,9 @@ def setup_local_config(config):
 
     else:
         dev_name = "cpu"
+
     config.device = torch.device(dev_name)
+    print('> dev: ', dev_name)
 
     # set up ddp
     if 'enable_ddp' in config and config.enable_ddp:
@@ -367,9 +368,6 @@ def setup_local_config(config):
             config.ddp_world_size = torch.cuda.device_count()
 
         ddp_setup(local_rank=config.ddp_local_rank, world_size=config.ddp_world_size)
-
-    ''' Backup config to output dir '''
-    save_config(config, os.path.join(config.machine_output_dir, 'config.yaml'))
 
 
 def test_load_config():
@@ -388,6 +386,35 @@ def copy_folder(src, dst):
         print(f"Folder '{src}' copied to '{dst}' successfully.")
     except Exception as e:
         print(f"Error: {e}")
+
+
+def standardize_tensor(data, mean, std, eps=1e-6):
+    if len(mean) != data.shape[1]:
+        raise RuntimeError('!Data dimension dis-matched! len(mean) != data.shape[1]')
+
+    if len(std) != data.shape[1]:
+        raise RuntimeError('!Data dimension dis-matched! len(std) != data.shape[1]')
+
+    for i_feature in range(data.shape[1]):
+        data[:, i_feature] -= mean[i_feature]
+        if abs(std[i_feature]) > eps:
+            data[:, i_feature] /= std[i_feature]
+
+    return data
+
+
+def reverse_standardize_tensor(data, mean, std):
+    if len(mean) != data.shape[1]:
+        raise RuntimeError('!Data dimension dis-matched! len(mean) != data.shape[1]')
+
+    if len(std) != data.shape[1]:
+        raise RuntimeError('!Data dimension dis-matched! len(std) != data.shape[1]')
+
+    for i_feature in range(data.shape[1]):
+        data *= std[i_feature]
+        data += mean[i_feature]
+
+    return data
 
 
 if __name__ == '__main__':

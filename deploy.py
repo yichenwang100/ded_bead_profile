@@ -165,6 +165,8 @@ def deploy_trained_model(output_dir,
 
     setup_local_config(config)
 
+    save_config(config, os.path.join(config.machine_output_dir, 'config.yaml'))
+
     # copy model to target dir
     shutil.copy(src=os.path.join(machine_model_dir, 'best_model_stats.csv'), dst=config.machine_output_dir)
     shutil.copy(src=os.path.join(machine_model_dir, 'best_model_wts.pth'), dst=config.machine_output_dir)
@@ -213,6 +215,8 @@ def deploy_trained_model(output_dir,
 
         config.dataset_name = dataset_name
         dataset = MyDataset(config)
+        if config.enable_standardization:
+            dataset.apply_standardization(config)
         _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
 
         # Test the model

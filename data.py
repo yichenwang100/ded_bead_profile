@@ -101,7 +101,7 @@ class MyDataset(Dataset):
     def __init__(self, config):
         self.config = config
 
-        '''Prep Data Here'''
+        ''' Load Data'''
         # load data from hard disk into tensor
         if config.dataset_name == 'simu_data':
             data_hidden_dim = (config.img_start_idx + config.img_embed_dim
@@ -115,20 +115,25 @@ class MyDataset(Dataset):
 
         self.data_tensor = data_tensor  # into memory (not gpu memory)
 
+        ''' Data extraction '''
         idx_lf, idx_rt = 0, 0
 
+        # img
         idx_lf, idx_rt = idx_rt + config.img_start_idx, idx_rt + config.img_start_idx + config.img_embed_dim
-        self.data_img = data_tensor[:, idx_lf:idx_rt].to(config.device)
+        self.data_img = data_tensor[:, idx_lf:idx_rt].float().to(config.device)
 
+        # param
         idx_lf, idx_rt = idx_rt + config.param_start_idx, idx_rt + config.param_start_idx + config.param_size
-        self.data_param = data_tensor[:, idx_lf:idx_rt].to(config.device)
+        self.data_param = data_tensor[:, idx_lf:idx_rt].float().to(config.device)
 
+        # pos
         idx_lf, idx_rt = idx_rt + config.pos_start_idx, idx_rt + config.pos_start_idx + config.pos_size
-        self.data_pos = data_tensor[:, idx_lf:idx_rt].to(config.device)
+        self.data_pos = data_tensor[:, idx_lf:idx_rt].float().to(config.device)
 
+        # label
         idx_lf, idx_rt = idx_rt + config.label_start_index, idx_rt + config.label_start_index + config.label_crop_size
         label_index = torch.linspace(idx_lf, idx_rt - 1, config.label_size).long()
-        self.data_label = data_tensor[:, label_index].to(config.device)
+        self.data_label = data_tensor[:, label_index].float().to(config.device)
 
         ''' Get indexable data '''
         # | sequence look-back          | ego   | sequence look-ahead   |
@@ -165,6 +170,15 @@ class MyDataset(Dataset):
         ''' Sub-sampling '''
         self.sys_sampling_interval = config.sys_sampling_interval
         self.data_len = self.data_len // self.sys_sampling_interval
+
+    def apply_standardization(self, config):
+        self.param_mean = config.param_mean
+        self.param_std = config.param_std
+        self.data_param = standardize_tensor(self.data_param, self.param_mean, self.param_std)
+
+        self.pos_mean = config.pos_mean
+        self.pos_std = config.pos_std
+        self.data_pos = standardize_tensor(self.data_pos, self.pos_mean, self.pos_std)
 
     def __len__(self):
         return self.data_len
@@ -217,6 +231,10 @@ class MyCombinedDataset(Dataset):
         self.total_len = self.cumulative_sizes[-1]
         self.total_bytes = np.sum(np.array(self.dataset_bytes, dtype=np.int64))
 
+    def apply_standardization(self, config):
+        for dataset in self.datasets:
+            dataset.apply_standardization(config)
+
     def __len__(self):
         return self.total_len
 
@@ -246,7 +264,7 @@ class MyCombinedDataset(Dataset):
                 return self.datasets[i_dataset].get_raw_data(dataset_index)
 
 
-def get_dataloaders(dataset, config, shuffle=True):
+def split_dataset(dataset, config, shuffle=True):
     # train, val, test split
     assert sum(config.train_val_test_ratio) == 1.0, "The train_val_test_ratio must sum to 1.0"
 
@@ -264,6 +282,38 @@ def get_dataloaders(dataset, config, shuffle=True):
         train_dataset = Subset(dataset, indices[:train_size]) if train_size > 0 else None
         val_dataset = Subset(dataset, indices[train_size:train_size + val_size]) if val_size > 0 else None
         test_dataset = Subset(dataset, indices[train_size + val_size:]) if test_size > 0 else None
+
+    return (train_dataset, val_dataset, test_dataset,
+            train_size, val_size, test_size)
+
+
+def calculate_standardization(dataset, config):
+    (train_dataset, val_dataset, test_dataset,
+     train_size, val_size, test_size) = split_dataset(dataset, config, shuffle=False)
+
+    # calculate_mean_std
+    param_data_list = []
+    pos_data_list = []
+    print('> calculate standardization mean/std based on the train_dataset...')
+    n_seq_enc_look_back = config.n_seq_enc_look_back
+    for idx in tqdm(train_dataset.indices):
+        # (index, item[1], item[2], item[3], item[4])
+        items = train_dataset.dataset[idx]
+        param_data_list.append(items[2][n_seq_enc_look_back].unsqueeze(0)) # add batch dimension
+        pos_data_list.append(items[3][n_seq_enc_look_back].unsqueeze(0))
+
+    param_data = torch.cat(param_data_list, dim=0)
+    config.param_mean = param_data.mean(axis=0)
+    config.param_std = param_data.std(axis=0)
+
+    pos_data = torch.cat(pos_data_list, dim=0)
+    config.pos_mean = pos_data.mean(axis=0)
+    config.pos_std = pos_data.std(axis=0)
+
+
+def get_dataloaders(dataset, config, shuffle=True):
+    (train_dataset, val_dataset, test_dataset,
+     train_size, val_size, test_size) = split_dataset(dataset, config, shuffle)
 
     train_sampler = None
     val_sampler = None

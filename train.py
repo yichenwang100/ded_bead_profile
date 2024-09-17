@@ -15,10 +15,15 @@ def train(config):
     if config.enable_seed:
         seed_everything(seed=config.seed)
 
-    # Prepare data
     dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
+    if config.enable_standardization:
+        calculate_standardization(dataset, config)
+        dataset.apply_standardization(config)
     train_loader, val_loader, test_loader = get_dataloaders(dataset, config)
     train_loader_len, val_loader_len, test_loader_len = len(train_loader), len(val_loader), len(test_loader)
+
+    # Backup config to output dir
+    save_config(config, os.path.join(config.machine_output_dir, 'config.yaml'))
 
     # Set up model, loss function, etc.
     model, adaptor, criterion, metric, optimizer, scheduler = get_model(config)
