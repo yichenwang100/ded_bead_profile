@@ -267,6 +267,33 @@ def get_config_from_cmd(parser):
     return proj_config
 
 
+def setup_local_device(config):
+    if config.enable_gpu and torch.cuda.is_available():
+        # auto get core index with the min memory used
+        if config.dp_core_idx < 0:
+            config.dp_core_idx = get_least_used_gpu()
+
+        dev_name = f'cuda:{config.dp_core_idx}'
+
+    else:
+        dev_name = "cpu"
+
+    config.device = torch.device(dev_name)
+    print('> dev: ', dev_name)
+
+    # set up ddp
+    if 'enable_ddp' in config and config.enable_ddp:
+        ddp_cleanup()
+
+        if config.ddp_local_rank < 0:
+            config.ddp_local_rank = 0
+
+        if config.ddp_world_size < 0:
+            config.ddp_world_size = torch.cuda.device_count()
+
+        ddp_setup(local_rank=config.ddp_local_rank, world_size=config.ddp_world_size)
+
+
 # prep all local-machine related dir, naming, etc.
 def setup_local_config(config):
     ''' setup the basic environment from config
@@ -344,30 +371,7 @@ def setup_local_config(config):
     # print("> machine_checkpoint_dir: ", os.path.abspath(config.machine_checkpoint_dir))  # prep all dir
 
     ''' GPU and device setting '''
-    if config.enable_gpu and torch.cuda.is_available():
-        # auto get core index with the min memory used
-        if config.dp_core_idx < 0:
-            config.dp_core_idx = get_least_used_gpu()
-
-        dev_name = f'cuda:{config.dp_core_idx}'
-
-    else:
-        dev_name = "cpu"
-
-    config.device = torch.device(dev_name)
-    print('> dev: ', dev_name)
-
-    # set up ddp
-    if 'enable_ddp' in config and config.enable_ddp:
-        ddp_cleanup()
-
-        if config.ddp_local_rank < 0:
-            config.ddp_local_rank = 0
-
-        if config.ddp_world_size < 0:
-            config.ddp_world_size = torch.cuda.device_count()
-
-        ddp_setup(local_rank=config.ddp_local_rank, world_size=config.ddp_world_size)
+    setup_local_device(config)
 
 
 def test_load_config():

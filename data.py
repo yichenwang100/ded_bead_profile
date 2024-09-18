@@ -303,12 +303,12 @@ def calculate_standardization(dataset, config):
         pos_data_list.append(items[3][n_seq_enc_look_back].unsqueeze(0))
 
     param_data = torch.cat(param_data_list, dim=0)
-    config.param_mean = param_data.mean(axis=0)
-    config.param_std = param_data.std(axis=0)
+    config.param_mean = param_data.mean(axis=0).cpu().tolist()
+    config.param_std = param_data.std(axis=0).cpu().tolist()
 
     pos_data = torch.cat(pos_data_list, dim=0)
-    config.pos_mean = pos_data.mean(axis=0)
-    config.pos_std = pos_data.std(axis=0)
+    config.pos_mean = pos_data.mean(axis=0).cpu().tolist()
+    config.pos_std = pos_data.std(axis=0).cpu().tolist()
 
 
 def get_dataloaders(dataset, config, shuffle=True):
@@ -519,6 +519,7 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
         param.requires_grad = False
 
     # Move model to GPU if available
+    setup_local_device(config)
     cnn_model = cnn_model.to(config.device)
     cnn_model.eval()
 
@@ -606,9 +607,9 @@ if __name__ == '__main__':
     # test_dataset()
     #
     img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240911'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240911'
+    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240918'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240918'
     # convert_xlsx_to_csv(data_root_dir)
-    # compute_stats_for_all_csv(data_root_dir)
+    compute_stats_for_all_csv(data_root_dir)
     # create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
-    create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=16)
+    # create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)
