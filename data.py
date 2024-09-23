@@ -25,13 +25,13 @@ param_str_list = [
     "POWER_PATTERN",  #     3
     "FEEDRATE_PATTERN",  #  4
     "LINEIDX",  #           5
-    "RTCP",  #              6
-    "CLOCKWISE",  #         7
-    "CURVATURE",  #         8
-    "POWER",  #             9
-    "FEEDRATE",  #          10
-    "POWER_DIFF",  #        11
-    "FEEDRATE_DIFF"  #      12
+    "RTCP",  #              6   # 0 # used
+    "CLOCKWISE",  #         7   # 1 # used
+    "CURVATURE",  #         8   # 2 # used
+    "POWER",  #             9   # 3 # used
+    "FEEDRATE",  #          10  # 4 # used
+    "POWER_DIFF",  #        11  # 5 # excluded
+    "FEEDRATE_DIFF"  #      12  # 6 # excluded
 ]
 
 
@@ -621,6 +621,6 @@ if __name__ == '__main__':
     data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
     output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240919'
     # convert_xlsx_to_csv(data_root_dir)
-    # compute_stats_for_all_csv(data_root_dir)
+    compute_stats_for_all_csv(data_root_dir)
     # create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
-    create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)
+    # create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)
