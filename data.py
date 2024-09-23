@@ -19,19 +19,19 @@ from util import *
 '''***********************************************************************'''
 
 param_str_list = [
-    "EXP_ID",
-    "POINT_ID",
-    "FREQUENCY",
-    "POWER_PATTERN",
-    "FEEDRATE_PATTERN",
-    "LINEIDX",
-    "RTCP",
-    "CLOCKWISE",
-    "CURVATURE",
-    "POWER",
-    "FEEDRATE",
-    "POWER_DIFF",
-    "FEEDRATE_DIFF"
+    "EXP_ID",  #            0
+    "POINT_ID",  #          1
+    "FREQUENCY",  #         2
+    "POWER_PATTERN",  #     3
+    "FEEDRATE_PATTERN",  #  4
+    "LINEIDX",  #           5
+    "RTCP",  #              6
+    "CLOCKWISE",  #         7
+    "CURVATURE",  #         8
+    "POWER",  #             9
+    "FEEDRATE",  #          10
+    "POWER_DIFF",  #        11
+    "FEEDRATE_DIFF"  #      12
 ]
 
 
@@ -40,21 +40,21 @@ def param_id_to_str(id):
 
 
 pos_str_list = [
-    "DISTANCE",
-    "TIME",
-    "AXIS_X",
-    "AXIS_Y",
-    "WCS_AXIS_X",
-    "WCS_AXIS_Y",
-    "AXIS_C",
-    "VEL_X",
-    "VEL_Y",
-    "VEL_C",
-    "ANGLE_WCS_AXIS",
-    "ANGLE_AXIS",
-    "ACC_X",
-    "ACC_Y",
-    "ACC_C"
+    "DISTANCE",  #      0
+    "TIME",  #          1
+    "AXIS_X",  #        2
+    "AXIS_Y",  #        3
+    "WCS_AXIS_X",  #    4
+    "WCS_AXIS_Y",  #    5
+    "AXIS_C",  #        6
+    "VEL_X",  #         7
+    "VEL_Y",  #         8
+    "VEL_C",  #         9
+    "ANGLE_WCS_AXIS",  #10
+    "ANGLE_AXIS",  #    11
+    "ACC_X",  #         12
+    "ACC_Y",  #         13
+    "ACC_C"  #          14
 ]
 
 
@@ -162,7 +162,7 @@ class MyDataset(Dataset):
             data_mask = valid_data_mask
 
         self.raw_data_index = (data_mask[self.n_seq_enc_look_back:
-                                         len(data_mask) - self.n_seq_enc_look_ahead - (self.n_seq_dec_pool-1)]
+                                         len(data_mask) - self.n_seq_enc_look_ahead - (self.n_seq_dec_pool - 1)]
                                .nonzero().squeeze())
         self.raw_data_index += self.n_seq_enc_look_back
         self.data_len = len(self.raw_data_index)
@@ -179,6 +179,13 @@ class MyDataset(Dataset):
         self.pos_mean = config.pos_mean
         self.pos_std = config.pos_std
         self.data_pos = standardize_tensor(self.data_pos, self.pos_mean, self.pos_std)
+
+    def apply_exclusion(self, config):
+        param_idx = [i for i in range(self.data_param.shape[1]) if i not in config.param_exclude]
+        self.data_param = self.data_param[:, param_idx]
+
+        pos_idx = [i for i in range(self.data_pos.shape[1]) if i not in config.pos_exclude]
+        self.data_pos = self.data_pos[:, pos_idx]
 
     def __len__(self):
         return self.data_len
@@ -206,13 +213,13 @@ class MyCombinedDataset(Dataset):
             # iterate all dataset in the folder
             file_list = [file for file in os.listdir(config.machine_dataset_dir)
                          if file.endswith('.pt')
-                         and file not in config.dataset_exclude]
+                         and file not in config.dataset_exclude_for_deploy]
             file_num = int(len(file_list) * config.dataset_iterate_ratio)
             file_list = file_list[:file_num]
         else:
             file_list = [file for file in os.listdir(config.machine_dataset_dir)
                          if file.endswith('.pt')
-                         and file in config.dataset_exclude]
+                         and file in config.dataset_exclude_for_deploy]
             file_num = len(file_list)
 
         self.dataset_num = file_num
@@ -230,6 +237,10 @@ class MyCombinedDataset(Dataset):
         self.cumulative_sizes = np.cumsum(self.dataset_len)
         self.total_len = self.cumulative_sizes[-1]
         self.total_bytes = np.sum(np.array(self.dataset_bytes, dtype=np.int64))
+
+    def apply_exclusion(self, config):
+        for dataset in self.datasets:
+            dataset.apply_exclusion(config)
 
     def apply_standardization(self, config):
         for dataset in self.datasets:
@@ -299,7 +310,7 @@ def calculate_standardization(dataset, config):
     for idx in tqdm(train_dataset.indices):
         # (index, item[1], item[2], item[3], item[4])
         items = train_dataset.dataset[idx]
-        param_data_list.append(items[2][n_seq_enc_look_back].unsqueeze(0)) # add batch dimension
+        param_data_list.append(items[2][n_seq_enc_look_back].unsqueeze(0))  # add batch dimension
         pos_data_list.append(items[3][n_seq_enc_look_back].unsqueeze(0))
 
     param_data = torch.cat(param_data_list, dim=0)
@@ -607,9 +618,9 @@ if __name__ == '__main__':
     # test_dataset()
     #
     img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240918'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240918'
+    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240919'
     # convert_xlsx_to_csv(data_root_dir)
-    compute_stats_for_all_csv(data_root_dir)
+    # compute_stats_for_all_csv(data_root_dir)
     # create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
-    # create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)
+    create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)

@@ -16,9 +16,11 @@ def train(config):
         seed_everything(seed=config.seed)
 
     dataset = MyCombinedDataset(config) if config.enable_iterate_dataset else MyDataset(config)
-    if config.enable_standardization:
+    if config.enable_standardize_feature:
         calculate_standardization(dataset, config)
         dataset.apply_standardization(config)
+    if config.enable_exclude_feature:
+        dataset.apply_exclusion(config)
     train_loader, val_loader, test_loader = get_dataloaders(dataset, config)
     train_loader_len, val_loader_len, test_loader_len = len(train_loader), len(val_loader), len(test_loader)
 

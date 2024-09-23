@@ -7,27 +7,27 @@ machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_rewrite_output_dir: True
-output_dir: './output/p2_ded_bead_profile/v10.0'  # relative to data_root_dir
+output_dir: './output/p2_ded_bead_profile/v11.0'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'no_pos.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
+extra_name: 'no_abl.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
 enable_computational_test: False
 
 # Data
-dataset_dir: './dataset/p2_ded_bead_profile/20240918'  # relative to data_root_dir
-## Dataset
-dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
+dataset_dir: './dataset/p2_ded_bead_profile/20240919'  # relative to data_root_dir
+raw_timestamp_interval: 2.5  # ms
+## Dataset and Dataloader
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
 dataset_iterate_ratio: 1.0 # use only portion of the dataset
-sys_sampling_interval: 1  # systematic sampling interval <--------------------------------------------
-raw_timestamp_interval: 2.5  # ms
-enable_standardization: True
-## Data loader
-dataset_exclude: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt', 'Low_const_const_1_dataset.pt', 'Low_const_const_2_dataset.pt', 'High_sin_tooth_1_dataset.pt', 'High_sin_tooth_2_dataset.pt'] # used when enable_deploy_dataset == True
+dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_deploy_dataset: False
+dataset_exclude_for_deploy: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt', 'Low_const_const_1_dataset.pt', 'Low_const_const_2_dataset.pt', 'High_sin_tooth_1_dataset.pt', 'High_sin_tooth_2_dataset.pt'] # used when enable_deploy_dataset == True
 train_val_test_ratio: [0.8, 0.1, 0.1]
 batch_size: 64
 num_workers: 0  # no need to set if all data in GPU
-## Special filter
+## Special sampler/filter/modifier
+sys_sampling_interval: 1  # systematic sampling interval <--------------------------------------------
+enable_standardize_feature: True
+enable_exclude_feature: True
 enable_rtcp: 'both' # 'on_only', 'off_only' 'both'
 ## Sequence length
 n_seq_enc_look_back: 100
@@ -55,7 +55,7 @@ pos_mean: []
 pos_std: []
 ## Feature / Output
 label_start_index: 13 # 6 for WHA, 7 for Sigmoid param, the rest for cropped data (53 for data 0730, 13+ for 0823/later)
-label_crop_size: 40  # crop from the original 600 points
+label_crop_size: 400  # crop from the original 600 points
 label_size: 40
 label_noise_cutoff: 0.01
 
@@ -73,7 +73,7 @@ img_embed_dim: 512    # number of conv. feature
 enable_param_embed: True  # --- ABLATION
 param_embed_dim: 6
 ## embedding / Positional
-enable_pos_embed: False  # --- ABLATION
+enable_pos_embed: True  # --- ABLATION
 pos_embed_exclude: None
 pos_embed_dim: 6
 ## encoder

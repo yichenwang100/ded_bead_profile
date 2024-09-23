@@ -184,13 +184,19 @@ class MyInputEmbedding(nn.Module):
 
         self.enable_param_embed = config.enable_param_embed
         if self.enable_param_embed:
-            self.hidden_dim += config.param_embed_dim * config.param_size
-            self.param_embed = MyEmbeddingBlock(config.param_size, config.param_embed_dim, config.feature_embed_option)
+            if not config.enable_exclude_feature:
+                config.param_exclude = []
+            adjusted_param_size = config.param_size - len(config.param_exclude)
+            self.hidden_dim += config.param_embed_dim * adjusted_param_size
+            self.param_embed = MyEmbeddingBlock(adjusted_param_size, config.param_embed_dim, config.feature_embed_option)
 
         self.enable_pos_embed = config.enable_pos_embed
         if self.enable_pos_embed:
-            self.hidden_dim += config.pos_embed_dim * config.pos_size
-            self.pos_embed = MyEmbeddingBlock(config.pos_size, config.pos_embed_dim, config.feature_embed_option)
+            if not config.enable_exclude_feature:
+                config.pos_exclude = []
+            adjusted_pos_size = config.pos_size - len(config.pos_exclude)
+            self.hidden_dim += config.pos_embed_dim * adjusted_pos_size
+            self.pos_embed = MyEmbeddingBlock(adjusted_pos_size, config.pos_embed_dim, config.feature_embed_option)
 
         print(f'> MyInputEmbedding: hidden_dim = {self.hidden_dim}')
         config.embed_dim = self.hidden_dim

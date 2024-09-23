@@ -207,7 +207,7 @@ def deploy_trained_model(output_dir,
         file_num = int(len(raw_file_list))
         file_list = raw_file_list[int(file_num * dataset_file_ratio[0]):int(file_num * dataset_file_ratio[1])]
     else:
-        file_list = config.dataset_exclude
+        file_list = config.dataset_exclude_for_deploy
 
     for dataset_name in file_list:
         if config.enable_seed:
@@ -215,8 +215,10 @@ def deploy_trained_model(output_dir,
 
         config.dataset_name = dataset_name
         dataset = MyDataset(config)
-        if config.enable_standardization:
+        if config.enable_standardize_feature:
             dataset.apply_standardization(config)
+        if config.enable_exclude_feature:
+            dataset.apply_exclusion(config)
         _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
 
         # Test the model
@@ -230,13 +232,13 @@ if __name__ == '__main__':
     # TEST_MODE = 'test-Saliency'
 
     if TEST_MODE == 'deploy':  # deploy mode on
-        output_dir = './output/p2_ded_bead_profile/v8.0.d'
+        output_dir = './output/p2_ded_bead_profile/v11.0.d'
         extra_name = None
 
-        dataset_dir = './dataset/p2_ded_bead_profile/20240911'
+        dataset_dir = './dataset/p2_ded_bead_profile/20240919'
 
-        model_dir = './output/p2_ded_bead_profile/v8.0'
-        model_name = f"240916-164534.7269.rtcp_off.sample_1.enc_200.dec_100.pool_1.label_80.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812"
+        model_dir = './output/p2_ded_bead_profile/v11.0'
+        model_name = f"240920-000316.7900.no_pos.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812"
 
         deploy_trained_model(output_dir=output_dir,
                              extra_name=extra_name,
