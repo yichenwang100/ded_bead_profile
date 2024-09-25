@@ -9,7 +9,7 @@ seed: 42
 enable_rewrite_output_dir: True
 output_dir: './output/p2_ded_bead_profile/v11.0'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'param_4_no_power.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812'
+extra_name: 'param_5_no_PV.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_0.4e-5_0.985.loss_008812'
 enable_computational_test: False
 
 # Data
@@ -43,7 +43,7 @@ img_start_idx: 0    # shift in starting index
 ## Feature / Parameter
 param_start_idx: 6
 param_size: 7   # number of expr. parameters
-param_exclude: [3, 5, 6] # to be excluded from param_size, start from 0
+param_exclude: [3, 4, 5, 6] # to be excluded from param_size, start from 0
 param_mean: []
 param_std: []
 # 1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0
@@ -108,7 +108,7 @@ computation_eps: 1.0e-6
 ## optimizer
 num_epochs: 100
 optimizer_option: 'adam_Vaswani_2017' # 'adam', 'adamw', 'adam_Vaswani_2017'
-lr: 1.5e-4  # learning rate 1.0e-4, 1.2e-4
+lr: 0.4e-5  # learning rate 1.0e-4, 1.2e-4
 enable_weight_decay: False
 wd: 1.0e-4  # weight decay
 enable_adaptive_lr: True
@@ -125,5 +125,3 @@ log_dir: './logs/'  # relative to output_dir
 enable_tensorboard: True
 enable_save_history_stats_to_csv: True
 enable_save_attention: False
-enable_save_residual: False
-

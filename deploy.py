@@ -6,10 +6,16 @@ from util import *
 from model import *
 from data import *
 
+# setup modes
+ENABLE_SALIENCY = True
+
 
 def testify(config, model, adaptor, criterion, metric, dataset, data_loader, test_mode='test', extra_name=''):
     # Set the model to evaluation mode
-    model.eval()
+    if ENABLE_SALIENCY:
+        model.train()
+    else:
+        model.eval()
 
     ''' Test Starts '''
     batch_size = config.batch_size
@@ -42,65 +48,92 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
 
     t_start = time.time()
     progress_bar = tqdm(range(len(data_loader)), ncols=100)
-    with torch.no_grad():
-        # auto-regression:
+
+    if ENABLE_SALIENCY:
+        torch.set_grad_enabled(True)  # same as with torch.no_grad():
+    else:
+        torch.set_grad_enabled(False)
+
+    if ENABLE_SALIENCY:
+        saliency_map_img_hist = []
+        saliency_map_param_hist = []
+        saliency_map_pos_hist = []
+
+    # auto-regression:
+    if enable_auto_regression:
+        y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=config.device)
+
+    for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
+        # x, y = x.to(config.device), y.to(config.device)
+
+        if ENABLE_SALIENCY:
+            x_img.requires_grad = True
+            x_param.requires_grad = True
+            x_pos.requires_grad = True
+
+        i_dec = 0
+        # Forward
+        y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
+                       x_param[:, i_dec:i_dec + n_seq_enc_total, :],
+                       x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
+                       y_pool if enable_auto_regression else None,
+                       # reset_dec_hx=(i_dec == 0),
+                       reset_dec_hx=True,
+                       )
+
+        if ENABLE_SALIENCY:
+            y_pred.sum().backward()
+
+            saliency_map_img = x_img.grad.abs().squeeze(0).cpu().numpy()
+            saliency_map_img_hist.append(saliency_map_img)
+
+            saliency_map_param = x_param.grad.abs().squeeze(0).cpu().numpy()
+            saliency_map_param_hist.append(saliency_map_param)
+
+            saliency_map_pos = x_pos.grad.abs().squeeze(0).cpu().numpy()
+            saliency_map_pos_hist.append(saliency_map_pos)
+
+        y_true = y[:, i_dec + n_seq_enc_look_back, :]
+
+        # Shift elements left and insert the new prediction at the end
         if enable_auto_regression:
-            y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=config.device)
+            if y_pool.size(1) <= n_seq_enc_look_back:
+                y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+            else:
+                y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
+            # y_pool = y_pred.unsqueeze(1) # if keep lstm memory
 
-        for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
-            # x, y = x.to(config.device), y.to(config.device)
+        # Adaptor
+        if 'enable_adaptor' in config and config.enable_adaptor:
+            y_pred = adaptor.compute(y_pred)
 
-            i_dec = 0
-            # Forward
-            y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
-                           x_param[:, i_dec:i_dec + n_seq_enc_total, :],
-                           x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
-                           y_pool if enable_auto_regression else None,
-                           # reset_dec_hx=(i_dec == 0),
-                           reset_dec_hx=True,
-                           )
+        # Criterion
+        loss = criterion(y_pred, y_true).cpu().item()
+        val_loss_sum += loss
+        val_y_loss[i_loader, 0] = loss
 
-            y_true = y[:, i_dec + n_seq_enc_look_back, :]
+        metric_temp = metric(y_pred, y_true).cpu().item()
+        val_metric_sum += metric_temp
+        val_y_metric[i_loader, 0] = metric_temp
 
-            # Shift elements left and insert the new prediction at the end
-            if enable_auto_regression:
-                if y_pool.size(1) <= n_seq_enc_look_back:
-                    y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
-                else:
-                    y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
-                # y_pool = y_pred.unsqueeze(1) # if keep lstm memory
+        # Record
+        val_y_true_history[i_record, :] = y_true.cpu().detach()
+        val_y_pred_history[i_record, :] = y_pred.cpu().detach()
 
-            # Adaptor
-            if 'enable_adaptor' in config and config.enable_adaptor:
-                y_pred = adaptor.compute(y_pred)
+        val_raw_data_history[i_record] = dataset.get_raw_data(index, index_shift=i_dec).squeeze().cpu()
 
-            # Criterion
-            loss = criterion(y_pred, y_true).cpu().item()
-            val_loss_sum += loss
-            val_y_loss[i_loader, 0] = loss
+        i_record += 1
 
-            metric_temp = metric(y_pred, y_true).cpu().item()
-            val_metric_sum += metric_temp
-            val_y_metric[i_loader, 0] = metric_temp
+        if config.enable_save_attention:
+            pass
+            # feature_attn_sum += model.encoder.encoder[0].attn_map.cpu().detach().squeeze(0)
+            # temporal_attn_sum += model.encoder.encoder[1].attn_map.cpu().detach().squeeze(0)
 
-            # Record
-            val_y_true_history[i_record, :] = y_true.cpu().detach()
-            val_y_pred_history[i_record, :] = y_pred.cpu().detach()
-
-            val_raw_data_history[i_record] = dataset.get_raw_data(index, index_shift=i_dec).squeeze().cpu()
-
-            i_record += 1
-
-            if config.enable_save_attention:
-                pass
-                # feature_attn_sum += model.encoder.encoder[0].attn_map.cpu().detach().squeeze(0)
-                # temporal_attn_sum += model.encoder.encoder[1].attn_map.cpu().detach().squeeze(0)
-
-            progress_bar.set_description(f"Step [{i_loader}/{len(data_loader)}]"
-                                         f", L:{val_loss_sum / (i_loader + 1):.4f}"
-                                         f", metric:{val_metric_sum / (i_loader + 1):.3f}"
-                                         f"\t>>>")
-            progress_bar.update()
+        progress_bar.set_description(f"Step [{i_loader}/{len(data_loader)}]"
+                                     f", L:{val_loss_sum / (i_loader + 1):.4f}"
+                                     f", metric:{val_metric_sum / (i_loader + 1):.3f}"
+                                     f"\t>>>")
+        progress_bar.update()
 
     # metrics and temp results
     val_loss_mean = val_loss_sum / len_loader
@@ -144,6 +177,15 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
     stats_df.to_csv(os.path.join(config.machine_output_dir, f"best_model_results.{test_mode}.{extra_name}.csv"),
                     index=False)
 
+    if ENABLE_SALIENCY:
+        saliency_map_img_stack = np.stack(saliency_map_img_hist)
+        saliency_map_param_stack = np.stack(saliency_map_param_hist)
+        saliency_map_pos_stack = np.stack(saliency_map_pos_hist)
+        os.makedirs(os.path.join(config.machine_output_dir, 'temp'), exist_ok=True)
+        np.save(os.path.join(config.machine_output_dir, 'temp', 'saliency_map_img.npy'), saliency_map_img_stack)
+        np.save(os.path.join(config.machine_output_dir, 'temp', 'saliency_map_param.npy'), saliency_map_param_stack)
+        np.save(os.path.join(config.machine_output_dir, 'temp', 'saliency_map_pos.npy'), saliency_map_pos_stack)
+
 
 def deploy_trained_model(output_dir,
                          extra_name,
@@ -151,7 +193,7 @@ def deploy_trained_model(output_dir,
                          model_dir,
                          model_name,
                          use_all_dataset=True,
-                         dataset_file_ratio=[0, 0.5],
+                         dataset_file_ratio=[0, 1],
                          self_reg=False):
     # setup local environment
     machine_config = load_attribute_dict('machine.yaml')
@@ -174,7 +216,6 @@ def deploy_trained_model(output_dir,
     '''system override'''
     config.enable_deploy_dataset = True
     config.train_val_test_ratio = [0, 0, 1]
-
     config.batch_size = 1
 
     if self_reg:
@@ -202,12 +243,12 @@ def deploy_trained_model(output_dir,
 
     ''' Load the test dataset '''
     if use_all_dataset:
-        raw_file_list = [file for file in os.listdir(config.dataset_dir)
-                         if file.endswith('.pt')]
-        file_num = int(len(raw_file_list))
-        file_list = raw_file_list[int(file_num * dataset_file_ratio[0]):int(file_num * dataset_file_ratio[1])]
+        file_list = [file for file in os.listdir(config.dataset_dir) if file.endswith('.pt')]
     else:
         file_list = config.dataset_exclude_for_deploy
+
+    file_num = int(len(file_list))
+    file_list = file_list[int(file_num * dataset_file_ratio[0]):int(file_num * dataset_file_ratio[1])]
 
     for dataset_name in file_list:
         if config.enable_seed:
@@ -222,7 +263,7 @@ def deploy_trained_model(output_dir,
         _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
 
         # Test the model
-        print(f"\n> Testing dataset: {dataset_name}")
+        print(f"\n> Deploying on dataset: {dataset_name}")
         testify(config, model, adaptor, criterion, metric, dataset, test_loader,
                 test_mode='deploy', extra_name=dataset_name)
 
@@ -231,23 +272,22 @@ if __name__ == '__main__':
     TEST_MODE = 'deploy'
     # TEST_MODE = 'test-Saliency'
 
+    output_dir = './output/p2_ded_bead_profile/v11.0.d'
+    extra_name = 'param_5_saliency'
+
+    dataset_dir = './dataset/p2_ded_bead_profile/20240919'
+
+    model_dir = './output/p2_ded_bead_profile/v11.0'
+    model_name = f"240925-104949.7068.param_5.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_1.0e-5_0.985.loss_008812"
+
     if TEST_MODE == 'deploy':  # deploy mode on
-        output_dir = './output/p2_ded_bead_profile/v11.0.d'
-        extra_name = None
-
-        dataset_dir = './dataset/p2_ded_bead_profile/20240919'
-
-        model_dir = './output/p2_ded_bead_profile/v11.0'
-        model_name = f"240920-000316.7900.no_pos.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_1.5e-4_0.985.loss_008812"
-
         deploy_trained_model(output_dir=output_dir,
                              extra_name=extra_name,
                              dataset_dir=dataset_dir,
                              model_dir=model_dir,
                              model_name=model_name,
                              use_all_dataset=False,
-                             dataset_file_ratio=[0.5, 1],
+                             dataset_file_ratio=[0.2, 0.5],
                              self_reg=False)
-
     else:
         pass
