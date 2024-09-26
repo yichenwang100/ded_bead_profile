@@ -37,7 +37,6 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
     val_raw_data_history = torch.zeros((len_data, dataset.data_tensor.shape[1]))  # add a mask column
     val_y_true_history = torch.zeros((len_data, config.label_size))  # batch size = 1
     val_y_pred_history = torch.zeros_like(val_y_true_history)
-    y_noise_cutoff = config.label_noise_cutoff
 
     enable_auto_regression = (config.decoder_option == 'transformer')
 
@@ -182,9 +181,9 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
         saliency_map_param_stack = np.stack(saliency_map_param_hist)
         saliency_map_pos_stack = np.stack(saliency_map_pos_hist)
         os.makedirs(os.path.join(config.machine_output_dir, 'temp'), exist_ok=True)
-        np.save(os.path.join(config.machine_output_dir, 'temp', 'saliency_map_img.npy'), saliency_map_img_stack)
-        np.save(os.path.join(config.machine_output_dir, 'temp', 'saliency_map_param.npy'), saliency_map_param_stack)
-        np.save(os.path.join(config.machine_output_dir, 'temp', 'saliency_map_pos.npy'), saliency_map_pos_stack)
+        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_img.{test_mode}.{extra_name}.npy'), saliency_map_img_stack)
+        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_param.{test_mode}.{extra_name}.npy'), saliency_map_param_stack)
+        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_pos.{test_mode}.{extra_name}.npy'), saliency_map_pos_stack)
 
 
 def deploy_trained_model(output_dir,
@@ -278,7 +277,7 @@ if __name__ == '__main__':
     dataset_dir = './dataset/p2_ded_bead_profile/20240919'
 
     model_dir = './output/p2_ded_bead_profile/v11.0'
-    model_name = f"240925-104949.7068.param_5.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_1.0e-5_0.985.loss_008812"
+    model_name = f"240925-134412.8269.param_5.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_0.4e-5_0.985.loss_008812"
 
     if TEST_MODE == 'deploy':  # deploy mode on
         deploy_trained_model(output_dir=output_dir,
@@ -287,7 +286,7 @@ if __name__ == '__main__':
                              model_dir=model_dir,
                              model_name=model_name,
                              use_all_dataset=False,
-                             dataset_file_ratio=[0.2, 0.5],
+                             dataset_file_ratio=[0, 1],
                              self_reg=False)
     else:
         pass

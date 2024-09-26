@@ -433,18 +433,40 @@ def convert_xlsx_to_csv(folder_path):
             print(f"Converted {filename} to {csv_filename}")
 
 
-def calculate_statistics(csv_path):
+def calculate_fft_frequencies(data, sampling_rate):
+    fft_result = np.fft.fft(data)
+    fft_magnitude = np.abs(fft_result)
+    N = len(data)
+    frequencies = np.fft.fftfreq(N, d=1 / sampling_rate)
+
+    positive_indices = np.where(frequencies >= 0)
+    fft_magnitude = fft_magnitude[positive_indices]
+    frequencies = frequencies[positive_indices]
+
+    sorted_indices = np.argsort(fft_magnitude)[-2:]
+    first_freq = frequencies[sorted_indices[-1]]
+    second_freq = frequencies[sorted_indices[-2]]
+
+    return first_freq, second_freq
+
+
+def calculate_statistics(csv_path, sampling_rate=400):
     df = pd.read_csv(csv_path)
     stats = {}
+
     for col in df.columns:
         if df[col].dtype == 'object':
             stats[col] = {stat: np.nan for stat in
                           ['mean', 'median', 'std', 'min', 'max', 'num_zeros', 'num_negative', 'num_positive',
-                           'pct_zeros']}
+                           'pct_zeros', 'fft_1st_freq', 'fft_2nd_freq']}
         else:
             total_count = len(df[col])
             zero_count = (df[col] == 0).sum()
             precision = 5
+
+            # Compute FFT frequencies
+            first_freq, second_freq = calculate_fft_frequencies(df[col].values, sampling_rate)
+
             stats[col] = {
                 'mean': round(df[col].mean(), precision),
                 'median': round(df[col].median(), precision),
@@ -454,9 +476,12 @@ def calculate_statistics(csv_path):
                 'num_zeros': zero_count,
                 'pct_zeros': round((zero_count / total_count) * 100, precision),
                 'num_negative': (df[col] < 0).sum(),
-                'num_positive': (df[col] > 0).sum()
+                'num_positive': (df[col] > 0).sum(),
+                'fft_1st_freq': round(first_freq, precision),
+                'fft_2nd_freq': round(second_freq, precision)
             }
-    return stats, len(df), df.columns  # Return stats, number of rows, and the column order
+
+    return stats, len(df), df.columns
 
 
 def compute_stats_for_all_csv(directory_path):
@@ -466,7 +491,7 @@ def compute_stats_for_all_csv(directory_path):
     for csv_file in tqdm(csv_files, desc="Processing CSV files"):
         stats, data_size, columns = calculate_statistics(os.path.join(directory_path, csv_file))
         for stat_name in ['mean', 'median', 'std', 'min', 'max', 'num_zeros', 'pct_zeros', 'num_negative',
-                          'num_positive']:
+                          'num_positive', 'fft_1st_freq', 'fft_2nd_freq']:
             row = {
                 'Dataset': csv_file,
                 'Data Size': data_size,
@@ -477,18 +502,109 @@ def compute_stats_for_all_csv(directory_path):
             results.append(row)
 
     # Convert the results to a DataFrame
-    results_df = pd.DataFrame(results)
+    df = pd.DataFrame(results)
 
     # Sort the DataFrame by the 'Statistic Type' column and then by the 'EXP_ID' column
-    results_df = results_df.sort_values(by=['Statistic Type', 'EXP_ID'])
+    df = df.sort_values(by=['Statistic Type', 'EXP_ID'])
 
+    ''' output to csv '''
     # Determine the output file path
-    output_csv = os.path.join(os.path.dirname(directory_path), f"{os.path.basename(directory_path)}_stats.csv")
+    output_csv_path = os.path.join(os.path.dirname(directory_path), f"{os.path.basename(directory_path)}_stats.csv")
 
     # Save the sorted DataFrame to the output CSV file
-    results_df.to_csv(output_csv, index=False, float_format='%.5f')
-    print(f"Statistics saved to {output_csv}")
+    df.to_csv(output_csv_path, index=False, float_format='%.5f')
+    print(f"Statistics saved to {output_csv_path}")
 
+
+def analyze_stats_for_all_csv(directory_path, feature_lf=5, feature_rt=17, enable_fft=False):
+    output_csv_path = os.path.join(os.path.dirname(directory_path), f"{os.path.basename(directory_path)}_stats.csv")
+    df = pd.read_csv(output_csv_path)
+    print(f"\n> Read statistics from {output_csv_path}")
+
+    feature_names = df.columns.tolist()
+
+    # dataset name
+    exp_ids = df.loc[df['Statistic Type'] == 'Mean']['EXP_ID'].values
+    dataset_names = df.loc[df['Statistic Type'] == 'Mean']['Dataset'].values
+    dataset_name_ticks = [(f"{dataset_names[i_exp].split('.')[-2]}"
+                           f"(id={int(exp_ids[i_exp])})")
+                          for i_exp in range(len(exp_ids))]
+
+    # features
+    if enable_fft:
+        means = df.loc[df['Statistic Type'] == 'Fft_1st_freq']
+    else:
+        means = df.loc[df['Statistic Type'] == 'Mean']
+        stds = df.loc[df['Statistic Type'] == 'Std']
+
+    ''' plot '''
+    num_feature = feature_rt - feature_lf  # Adjust to available features
+    fig, axs = plt.subplots(num_feature, 1, figsize=(14, 1.1 * num_feature))
+
+    # Define alternating colors
+    dataset_exclude_for_deploy = ['Low_noise_noise_1.csv', 'Low_noise_noise_2.csv',
+                                  'Low_const_const_1.csv', 'Low_const_const_2.csv',
+                                  'High_sin_tooth_1.csv',
+                                  'High_sin_tooth_2.csv']  # used when enable_deploy_dataset == True
+    colors = ['grey', 'c']
+    color_exclude = 'orange'
+
+    for i, col in enumerate(feature_names[feature_lf:feature_rt]):
+        # Prepare data for boxplot
+        box_data = []
+        for dataset in dataset_names:
+            mean_value = means.loc[means['Dataset'] == dataset, col].values[0]
+            if enable_fft:
+                std_value = 0
+            else:
+                std_value = stds.loc[stds['Dataset'] == dataset, col].values[0]
+            # Create a list for box plot: [lower, mean, upper]
+            box_data.append([mean_value - std_value, mean_value, mean_value + std_value])
+
+        # Convert box_data to a format compatible with boxplot
+        box_data = np.array(box_data).T  # Transpose to have separate rows for each statistic
+
+        # Create boxplot with custom colors
+        bp = axs[i].boxplot(box_data, positions=np.arange(len(dataset_names)), widths=0.5)
+
+        # Set colors for each dataset's box
+        for j in range(len(bp['boxes'])):
+            if dataset_names[j] in dataset_exclude_for_deploy:
+                bp['boxes'][j].set_color(color_exclude)
+                bp['medians'][j].set_color(color_exclude)
+            else:
+                bp['boxes'][j].set_color(colors[j % len(colors)])
+                bp['medians'][j].set_color(colors[j % len(colors)])
+            bp['whiskers'][j * 2].set_color(colors[j % len(colors)])
+            bp['whiskers'][j * 2 + 1].set_color(colors[j % len(colors)])
+            bp['caps'][j * 2].set_color(colors[j % len(colors)])
+            bp['caps'][j * 2 + 1].set_color(colors[j % len(colors)])
+
+
+        # Color x-tick labels
+        for j, tick in enumerate(axs[i].get_xticklabels()):
+            if dataset_names[j] in dataset_exclude_for_deploy:
+                tick.set_color(color_exclude)
+            else:
+                tick.set_color(colors[j % len(colors)])
+
+        if i == num_feature - 1:
+            axs[i].set_xticks(np.arange(len(dataset_name_ticks)))
+            axs[i].set_xticklabels(dataset_name_ticks, rotation=90, ha='center')
+        else:
+            axs[i].set_xticks([])
+
+        # axs[i].set_title(col)
+        axs[i].set_ylabel(col, rotation=0, ha='right')
+
+    plt.tight_layout()
+    output_plt_path = os.path.join(os.path.dirname(directory_path),
+                                   f"{os.path.basename(directory_path)}_stats_"
+                                   f"{feature_lf}_{feature_rt}"
+                                   f"{'_fft' if enable_fft else ''}.png")
+    plt.savefig(output_plt_path, dpi=600)
+    print(f"> save plot to {output_plt_path}")
+    # plt.show()
 
 def create_dataset(data_file_path, img_root_dir, output_dir):
     print(f"> create_dataset_from_file: {data_file_path}")
@@ -621,6 +737,12 @@ if __name__ == '__main__':
     data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
     output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240919'
     # convert_xlsx_to_csv(data_root_dir)
-    compute_stats_for_all_csv(data_root_dir)
+    # compute_stats_for_all_csv(data_root_dir)
+    # analyze_stats_for_all_csv(data_root_dir, feature_lf=5, feature_rt=17)
+    # analyze_stats_for_all_csv(data_root_dir, feature_lf=17, feature_rt=32)
+    # analyze_stats_for_all_csv(data_root_dir, feature_lf=32, feature_rt=45)
+    analyze_stats_for_all_csv(data_root_dir, feature_lf=5, feature_rt=17, enable_fft=True)
+    analyze_stats_for_all_csv(data_root_dir, feature_lf=17, feature_rt=32, enable_fft=True)
+    analyze_stats_for_all_csv(data_root_dir, feature_lf=32, feature_rt=45, enable_fft=True)
     # create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
     # create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)
