@@ -7,9 +7,9 @@ machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_rewrite_output_dir: True
-output_dir: './output/p2_ded_bead_profile/v11.0'  # relative to data_root_dir
+output_dir: './output/p2_ded_bead_profile/v12.0'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'param_5_no_PV.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_0.4e-5_0.985.loss_008812'
+extra_name: 'param_5.standardize.sample_1.enc_300_ah_399.dec_100.pool_1.label_40.b64.no_auto_reg.lr_0.4e-5_0.985.loss_008812'
 enable_computational_test: False
 
 # Data
@@ -31,8 +31,8 @@ enable_exclude_feature: True
 enable_rtcp: 'both' # 'on_only', 'off_only' 'both'
 ## Sequence length
 n_seq_enc_look_back: 100
-n_seq_enc_look_ahead: 99
-n_seq_enc_total: 200
+n_seq_enc_look_ahead: 199
+n_seq_enc_total: 300
 n_seq_dec_look_back: 100
 n_seq_dec_pool: 1   # pool size >= 1
 ## Feature / Img
@@ -43,7 +43,7 @@ img_start_idx: 0    # shift in starting index
 ## Feature / Parameter
 param_start_idx: 6
 param_size: 7   # number of expr. parameters
-param_exclude: [3, 4, 5, 6] # to be excluded from param_size, start from 0
+param_exclude: [5, 6] # to be excluded from param_size, start from 0
 param_mean: []
 param_std: []
 # 1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0
