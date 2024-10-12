@@ -142,7 +142,7 @@ class MyDataset(Dataset):
         self.n_seq_enc_look_back = config.n_seq_enc_look_back
         self.n_seq_enc_look_ahead = config.n_seq_enc_look_ahead
         if config.n_seq_enc_total != self.n_seq_enc_look_back + self.n_seq_enc_look_ahead + 1:
-            raise RuntimeError("self.n_seq != self.n_seq_before + self.n_seq_after + 1")
+            raise RuntimeError("self.n_seq_enc_total != self.n_seq_enc_look_back + self.n_seq_enc_look_ahead + 1")
 
         self.n_seq_dec_pool = config.n_seq_dec_pool
         if self.n_seq_dec_pool < 1:
