@@ -279,7 +279,7 @@ def setup_local_device(config):
         dev_name = "cpu"
 
     config.device = torch.device(dev_name)
-    print('> dev: ', dev_name)
+    print('> local dev: ', dev_name)
 
     # set up ddp
     if 'enable_ddp' in config and config.enable_ddp:

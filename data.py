@@ -737,10 +737,10 @@ if __name__ == '__main__':
     data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
     output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20240919'
     # convert_xlsx_to_csv(data_root_dir)
-    # compute_stats_for_all_csv(data_root_dir)
-    # analyze_stats_for_all_csv(data_root_dir, feature_lf=5, feature_rt=17)
-    # analyze_stats_for_all_csv(data_root_dir, feature_lf=17, feature_rt=32)
-    # analyze_stats_for_all_csv(data_root_dir, feature_lf=32, feature_rt=45)
+    compute_stats_for_all_csv(data_root_dir)
+    analyze_stats_for_all_csv(data_root_dir, feature_lf=5, feature_rt=17)
+    analyze_stats_for_all_csv(data_root_dir, feature_lf=17, feature_rt=32)
+    analyze_stats_for_all_csv(data_root_dir, feature_lf=32, feature_rt=45)
     analyze_stats_for_all_csv(data_root_dir, feature_lf=5, feature_rt=17, enable_fft=True)
     analyze_stats_for_all_csv(data_root_dir, feature_lf=17, feature_rt=32, enable_fft=True)
     analyze_stats_for_all_csv(data_root_dir, feature_lf=32, feature_rt=45, enable_fft=True)

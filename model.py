@@ -559,6 +559,7 @@ class MyAdaptor(nn.Module):
 def get_model(config):
     # model
     model = MyModel(config).to(config.device)
+    print(f'> model name: {config.model}, param num: {get_model_parameter_num(model)}')
 
     # auto parallel in multiple gpu
     if config.enable_gpu:
