@@ -38,6 +38,7 @@ def train(config):
 
     # Create logger using pandas.dataframe and csv
     history_stats_df = None
+    best_model_stats_df = None
 
     # Training loop starts
     print('\n> Training Loop Starts...')
@@ -322,48 +323,75 @@ def train(config):
 
         # Checkpoint saving
         if config.enable_save_best_model and not best_model_saved:
-            best_model_saved = True
-
             if epoch % config.checkpoint_epoch_interval == 0 or epoch == num_epochs - 1:
                 # save model weights
                 torch.save(model.state_dict(), f"{config.machine_checkpoint_dir}/best_model_wts.pth")
 
+                # save all best models
+                if 'enable_save_all_best_model' in config and config.enable_save_all_best_model:
+                    # save model weights
+                    torch.save(model.state_dict(), f"{config.machine_checkpoint_dir}/best_model_wts_ep_{epoch}.pth")
+
                 # save stats
-                stats_df = pd.DataFrame(columns=stats_header)
-                stats_df.loc[0] = epoch_stats
-                stats_df.to_csv(f"{config.machine_checkpoint_dir}/best_model_stats.csv", index=False)
+                if best_model_stats_df is None:
+                    best_model_stats_df = pd.DataFrame(columns=stats_header)
+                best_model_stats_df.loc[len(best_model_stats_df)] = epoch_stats
+                best_model_stats_df.to_csv(f"{config.machine_checkpoint_dir}/best_model_stats.csv", index=False)
+
+                best_model_saved = True
 
     return model, epoch_stats
 
 if __name__ == '__main__':
-    config_raw = get_config_from_cmd(argparse.ArgumentParser())
+    config = get_config_from_cmd(argparse.ArgumentParser())
 
-    if config_raw.enable_computational_test:
-        # seq_list = [1, 5, 10, 15, 20, 25, 35, 50, 75, 100, 125, 150, 200, 225, 350, 300, 350, 400,
-        #             500, 600, 700, 800]
-        seq_list = [1, 5, 10, 15, 20, 25, 35, 50]
-        model_len_list = []
-        epoch_stats_list = []
-        for seq_len in seq_list:
-            print("\n")
-            print('>' * 50)
-            config_train = copy.deepcopy(config_raw)
-            config_train.extra_name = f'enc_{seq_len}'
-            config_train.num_epochs = 1
-            config_train.n_seq_enc_total = seq_len
-            config_train.n_seq_enc_look_back = 0
-            config_train.n_seq_enc_look_ahead = seq_len - 1
-            config_train.enable_standardize_feature = False
-            config_train.enable_tensorboard = False
-            config_train.enable_save_best_model = False
-            config_train.enable_save_attention = False
+    if 'training_mode' in config and config.training_mode != 'default':
+        if config.training_mode == 'epoch_time_test':
+            # seq_list = [1, 5, 10, 15, 20, 25, 35, 50, 75, 100, 125, 150, 200, 225, 350, 300, 350, 400,
+            #             500, 600, 700, 800]
+            seq_list = [1, 5, 10, 15, 20, 25, 35, 50]
+            model_len_list = []
+            epoch_stats_list = []
+            for seq_len in seq_list:
+                print("\n")
+                print('>' * 50)
+                config_train = copy.deepcopy(config)
+                config_train.extra_name = f'enc_{seq_len}'
+                config_train.num_epochs = 1
+                config_train.n_seq_enc_total = seq_len
+                config_train.n_seq_enc_look_back = 0
+                config_train.n_seq_enc_look_ahead = seq_len - 1
+                config_train.enable_standardize_feature = False
+                config_train.enable_tensorboard = False
+                config_train.enable_save_best_model = False
+                config_train.enable_save_attention = False
 
-            model, epoch_stats = train(config_train)
-            model_len_list.append(get_model_parameter_num(model))
-            epoch_stats_list.append(epoch_stats)
+                model, epoch_stats = train(config_train)
 
-        print(model_len_list)
-        print(epoch_stats_list)
+                model_len_list.append(get_model_parameter_num(model))
+                epoch_stats_list.append(epoch_stats)
+
+            print(model_len_list)
+            print(epoch_stats_list)
+
+        elif config.training_mode == 'seq_len_test':
+            len_list = [0, 5, 10, 25, 50, 100, 200, 300]
+            i_test = 0
+            for look_ahead_len in len_list:
+                for look_back_len in len_list:
+                    i_test += 1
+                    if i_test % 2 == 0:     # split to two gpu cores
+                        continue
+
+                    config_train = copy.deepcopy(config)
+
+                    total_seq_len = look_ahead_len + look_back_len + 1
+                    config_train.extra_name = f'enc_{total_seq_len}_ah_{look_ahead_len}'
+                    config_train.n_seq_enc_total = total_seq_len
+                    config_train.n_seq_enc_look_back = look_back_len
+                    config_train.n_seq_enc_look_ahead = look_ahead_len
+
+                    model, epoch_stats = train(config_train)
 
     else:
-        train(config_raw)
+        train(config)

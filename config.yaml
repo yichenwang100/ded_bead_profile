@@ -7,10 +7,10 @@ machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_rewrite_output_dir: True
-output_dir: './output/p2_ded_bead_profile/v12.0'  # relative to data_root_dir
+output_dir: './output/p2_ded_bead_profile/v13.1'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'param_5.standardize.sample_1.enc_400_ah_199.dec_100.pool_1.label_40.b64.no_auto_reg.lr_0.4e-5_0.985.loss_008812'
-enable_computational_test: False
+extra_name: 'param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812'
+training_mode: 'default' # training model: 'epoch_time_test', 'seq_len_test'
 
 # Data
 dataset_dir: './dataset/p2_ded_bead_profile/20240919'  # relative to data_root_dir
@@ -30,9 +30,9 @@ enable_standardize_feature: True
 enable_exclude_feature: True
 enable_rtcp: 'both' # 'on_only', 'off_only' 'both'
 ## Sequence length
-n_seq_enc_look_back: 200
-n_seq_enc_look_ahead: 199
-n_seq_enc_total: 400
+n_seq_enc_look_back: 100
+n_seq_enc_look_ahead: 100
+n_seq_enc_total: 201
 n_seq_dec_look_back: 100
 n_seq_dec_pool: 1   # pool size >= 1
 ## Feature / Img
@@ -60,7 +60,7 @@ label_size: 40
 label_noise_cutoff: 0.01
 
 # Model
-model: "STEN_GP_FFD_BLSTM"  # None, STEN_GP_FA_TA, STEN_GP_FFD, STEN_GP_TA_FFD, STEN_GP_FFD_TA, STEN_GP_FFD_BLSTM
+model: "STEN_GP_BLSTM_FFD"  # None, STEN_GP_FA_TA, STEN_GP_FFD, STEN_GP_TA_FFD, STEN_GP_FFD_TA, STEN_GP_FFD_BLSTM
 ## initialization
 enable_param_init: False  # default init method: kaiming_normal_
 ## embedding
@@ -118,6 +118,7 @@ lr_adaptive_max_epoch: 1000
 # Checkpoint
 checkpoint_dir: './'  # relative to output_dir
 enable_save_best_model: True
+enable_save_all_best_model: True
 checkpoint_epoch_interval: 5
 
 # Log

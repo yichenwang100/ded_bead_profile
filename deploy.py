@@ -7,12 +7,14 @@ from model import *
 from data import *
 
 # setup modes
-ENABLE_SALIENCY = True
+ENABLE_SAVE_SALIENCY = True
+ENABLE_SAVE_DETAILED_OUTPUT = True
+TEST_BATCH_SIZE = 64
 
 
 def testify(config, model, adaptor, criterion, metric, dataset, data_loader, test_mode='test', extra_name=''):
     # Set the model to evaluation mode
-    if ENABLE_SALIENCY:
+    if ENABLE_SAVE_SALIENCY:
         model.train()
     else:
         model.eval()
@@ -29,14 +31,15 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
     i_record = 0
 
     val_loss_sum = 0.0
-    val_y_loss = torch.zeros((len_data, 1))
-
     val_metric_sum = 0.0
-    val_y_metric = torch.zeros((len_data, 1))
 
-    val_raw_data_history = torch.zeros((len_data, dataset.data_tensor.shape[1]))  # add a mask column
-    val_y_true_history = torch.zeros((len_data, config.label_size))  # batch size = 1
-    val_y_pred_history = torch.zeros_like(val_y_true_history)
+    if ENABLE_SAVE_DETAILED_OUTPUT:
+        val_y_loss = torch.zeros((len_data, 1))
+        val_y_metric = torch.zeros((len_data, 1))
+
+        val_raw_data_history = torch.zeros((len_data, dataset.data_tensor.shape[1]))  # add a mask column
+        val_y_true_history = torch.zeros((len_data, config.label_size))  # batch size = 1
+        val_y_pred_history = torch.zeros_like(val_y_true_history)
 
     enable_auto_regression = (config.decoder_option == 'transformer')
 
@@ -48,12 +51,12 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
     t_start = time.time()
     progress_bar = tqdm(range(len(data_loader)), ncols=100)
 
-    if ENABLE_SALIENCY:
+    if ENABLE_SAVE_SALIENCY:
         torch.set_grad_enabled(True)  # same as with torch.no_grad():
     else:
         torch.set_grad_enabled(False)
 
-    if ENABLE_SALIENCY:
+    if ENABLE_SAVE_SALIENCY:
         saliency_map_img_hist = []
         saliency_map_param_hist = []
         saliency_map_pos_hist = []
@@ -65,7 +68,7 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
     for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
         # x, y = x.to(config.device), y.to(config.device)
 
-        if ENABLE_SALIENCY:
+        if ENABLE_SAVE_SALIENCY:
             x_img.requires_grad = True
             x_param.requires_grad = True
             x_pos.requires_grad = True
@@ -80,7 +83,7 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
                        reset_dec_hx=True,
                        )
 
-        if ENABLE_SALIENCY:
+        if ENABLE_SAVE_SALIENCY:
             y_pred.sum().backward()
 
             saliency_map_img = x_img.grad.abs().squeeze(0).cpu().numpy()
@@ -109,17 +112,19 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
         # Criterion
         loss = criterion(y_pred, y_true).cpu().item()
         val_loss_sum += loss
-        val_y_loss[i_loader, 0] = loss
 
         metric_temp = metric(y_pred, y_true).cpu().item()
         val_metric_sum += metric_temp
-        val_y_metric[i_loader, 0] = metric_temp
 
         # Record
-        val_y_true_history[i_record, :] = y_true.cpu().detach()
-        val_y_pred_history[i_record, :] = y_pred.cpu().detach()
+        if ENABLE_SAVE_DETAILED_OUTPUT:
+            val_y_loss[i_loader, 0] = loss
+            val_y_metric[i_loader, 0] = metric_temp
 
-        val_raw_data_history[i_record] = dataset.get_raw_data(index, index_shift=i_dec).squeeze().cpu()
+            val_y_true_history[i_record, :] = y_true.cpu().detach()
+            val_y_pred_history[i_record, :] = y_pred.cpu().detach()
+
+            val_raw_data_history[i_record] = dataset.get_raw_data(index, index_shift=i_dec).squeeze().cpu()
 
         i_record += 1
 
@@ -160,30 +165,48 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
         # torch.save(temporal_attn_mean, os.path.join(config.output_dir, "temporal_attn_mean.pth"))
 
     # save results
-    detailed_results = torch.cat((val_raw_data_history,
-                                  val_y_pred_history, val_y_true_history,
-                                  val_y_loss, val_y_metric), dim=1)
-    torch.save(detailed_results,
-               os.path.join(config.machine_output_dir, f"best_model_results.{test_mode}.{extra_name}.pt"))
+    if ENABLE_SAVE_DETAILED_OUTPUT:
+        detailed_results = torch.cat((val_raw_data_history,
+                                      val_y_pred_history, val_y_true_history,
+                                      val_y_loss, val_y_metric), dim=1)
+        torch.save(detailed_results,
+                   os.path.join(config.machine_output_dir, f"best_model_results.{test_mode}.{extra_name}.pt"))
 
-    column_header = []
-    column_header += [f'RAW_{i + 1}' for i in range(dataset.data_tensor.shape[1])]
-    column_header += [f"Y_PRED_{i + 1}" for i in range(config.label_size)]
-    column_header += [f"Y_TRUE_{i + 1}" for i in range(config.label_size)]
-    column_header += [f"LOSS"]
-    column_header += [f"METRIC"]
-    stats_df = pd.DataFrame(detailed_results.numpy(), columns=column_header)
-    stats_df.to_csv(os.path.join(config.machine_output_dir, f"best_model_results.{test_mode}.{extra_name}.csv"),
-                    index=False)
+        column_header = []
+        column_header += [f'RAW_{i + 1}' for i in range(dataset.data_tensor.shape[1])]
+        column_header += [f"Y_PRED_{i + 1}" for i in range(config.label_size)]
+        column_header += [f"Y_TRUE_{i + 1}" for i in range(config.label_size)]
+        column_header += [f"LOSS"]
+        column_header += [f"METRIC"]
+        stats_df = pd.DataFrame(detailed_results.numpy(), columns=column_header)
+        stats_df.to_csv(os.path.join(config.machine_output_dir, f"best_model_results.{test_mode}.{extra_name}.csv"),
+                        index=False)
 
-    if ENABLE_SALIENCY:
+    if ENABLE_SAVE_SALIENCY:
         saliency_map_img_stack = np.stack(saliency_map_img_hist)
         saliency_map_param_stack = np.stack(saliency_map_param_hist)
         saliency_map_pos_stack = np.stack(saliency_map_pos_hist)
+
+        saliency_map_img_mean = np.mean(saliency_map_img_stack, axis=0)
+        saliency_map_param_mean = np.mean(saliency_map_param_stack, axis=0)
+        saliency_map_pos_mean = np.mean(saliency_map_pos_stack, axis=0)
+
         os.makedirs(os.path.join(config.machine_output_dir, 'temp'), exist_ok=True)
-        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_img.{test_mode}.{extra_name}.npy'), saliency_map_img_stack)
-        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_param.{test_mode}.{extra_name}.npy'), saliency_map_param_stack)
-        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_pos.{test_mode}.{extra_name}.npy'), saliency_map_pos_stack)
+        saliency_map_img_mean.save(
+            os.path.join(config.machine_output_dir, 'temp', f'saliency_map_img.{test_mode}.{extra_name}.npy'))
+        saliency_map_param_mean.save(
+            os.path.join(config.machine_output_dir, 'temp', f'saliency_map_param.{test_mode}.{extra_name}.npy'))
+        saliency_map_pos_mean.save(
+            os.path.join(config.machine_output_dir, 'temp', f'saliency_map_pos.{test_mode}.{extra_name}.npy'))
+
+        # extra info saving
+        temp_header = ['dataset_len']
+        temp_df = pd.DataFrame(columns=temp_header)
+        temp_df.loc[0] = [len(saliency_map_img_hist)]
+
+        temp_df.to_csv(
+            os.path.join(config.machine_output_dir, 'temp', f'saliency_map_stats.{test_mode}.{extra_name}.csv'),
+            index=False)
 
 
 def deploy_trained_model(output_dir,
