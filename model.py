@@ -369,6 +369,10 @@ class MyEncoder(nn.Module):
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
                 layers.append(MyBiLSTMBlock(config, self.hidden_dim))
+        elif config.model == 'STEN_GP_BLSTM_FFD':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MyBiLSTMBlock(config, self.hidden_dim))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FFD_TA':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
