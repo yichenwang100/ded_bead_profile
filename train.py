@@ -380,9 +380,11 @@ if __name__ == '__main__':
             for look_ahead_len in len_list:
                 for look_back_len in len_list:
                     i_test += 1
-                    if i_test % 2 == 0:     # split to two gpu cores
+                    if i_test % 2 == 1:     # split to two gpu cores
                         continue
 
+                    print('*'*50, '\n')
+                    print(f'> look ahead: {look_ahead_len}, look back: {look_back_len}')
                     config_train = copy.deepcopy(config)
 
                     total_seq_len = look_ahead_len + look_back_len + 1
