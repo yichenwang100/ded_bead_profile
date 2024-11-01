@@ -5,7 +5,7 @@ from util import *
 from data import *
 from model import *
 from tqdm import tqdm
-
+PRINT_INTERVAL = 4
 
 def train(config):
     # set up dir
@@ -121,7 +121,8 @@ def train(config):
             train_metric_sum += metric_temp_sum / config.n_seq_dec_pool
 
             # Print
-            if i_loader % (train_loader_len // 4) == 0 or i_loader == train_loader_len - 1:
+            if (i_loader % (train_loader_len // PRINT_INTERVAL) == 0
+                    or i_loader == train_loader_len - 1):
                 train_print_step += 1
 
                 temp_train_loss = train_loss_sum / (i_loader + 1)
@@ -159,7 +160,7 @@ def train(config):
         t_val_start = time.time()
 
         model.eval()
-        with torch.no_grad():
+        with (torch.no_grad()):
             for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(val_loader):
 
                 # auto-regression:
@@ -199,7 +200,8 @@ def train(config):
                 val_metric_sum += metric_temp_sum / config.n_seq_dec_pool
 
                 # Print
-                if i_loader % (val_loader_len // 4) == 0 or i_loader == val_loader_len - 1:
+                if (i_loader % (val_loader_len // PRINT_INTERVAL) == 0
+                    or i_loader == val_loader_len - 1):
                     val_print_step += 1
 
                     temp_val_loss = val_loss_sum / (i_loader + 1)
@@ -375,25 +377,31 @@ if __name__ == '__main__':
             print(epoch_stats_list)
 
         elif config.training_mode == 'seq_len_test':
-            len_list = [0, 5, 10, 25, 50, 100, 200, 300]
+            seq_len_list = [0, 5, 10, 25, 50, 100, 200, 300]
             i_test = 0
-            for look_ahead_len in len_list:
-                for look_back_len in len_list:
+            for look_ahead_len in seq_len_list:
+                for look_back_len in seq_len_list:
                     i_test += 1
-                    if i_test % 2 == 1:     # split to two gpu cores
+                    if look_ahead_len == 0 and look_back_len == 0:
                         continue
+                    if look_ahead_len == 0 and look_back_len == 5:
+                        continue
+                    if i_test % 4 == 3:     # split tasks
+                        total_seq_len = look_ahead_len + look_back_len + 1
 
-                    print('*'*50, '\n')
-                    print(f'> look ahead: {look_ahead_len}, look back: {look_back_len}')
-                    config_train = copy.deepcopy(config)
+                        print('*'*50, '\n')
+                        print(f'> i_test: {i_test}/{len(seq_len_list)**2}'
+                              f', total len: {total_seq_len}'
+                              f', look ahead: {look_ahead_len}'
+                              f', look back: {look_back_len}')
+                        config_train = copy.deepcopy(config)
 
-                    total_seq_len = look_ahead_len + look_back_len + 1
-                    config_train.extra_name = f'enc_{total_seq_len}_ah_{look_ahead_len}'
-                    config_train.n_seq_enc_total = total_seq_len
-                    config_train.n_seq_enc_look_back = look_back_len
-                    config_train.n_seq_enc_look_ahead = look_ahead_len
+                        config_train.extra_name = f'enc_{total_seq_len}_ah_{look_ahead_len}'
+                        config_train.n_seq_enc_total = total_seq_len
+                        config_train.n_seq_enc_look_back = look_back_len
+                        config_train.n_seq_enc_look_ahead = look_ahead_len
 
-                    model, epoch_stats = train(config_train)
+                        model, epoch_stats = train(config_train)
 
     else:
         train(config)
