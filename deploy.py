@@ -265,7 +265,7 @@ def deploy_trained_model(output_dir,
 
     ''' Load the test dataset '''
     if use_all_dataset:
-        file_list = [file for file in os.listdir(config.dataset_dir) if file.endswith('.pt')]
+        file_list = [file for file in os.listdir(config.machine_dataset_dir) if file.endswith('.pt')]
     else:
         file_list = config.dataset_exclude_for_deploy
 
@@ -294,13 +294,13 @@ if __name__ == '__main__':
     TEST_MODE = 'deploy'
     # TEST_MODE = 'test-Saliency'
 
-    output_dir = './output/p2_ded_bead_profile/v11.0.d'
-    extra_name = 'param_5_saliency'
+    output_dir = './output/p2_ded_bead_profile/v13.1.d'
+    extra_name = 'all_datasets'
 
     dataset_dir = './dataset/p2_ded_bead_profile/20240919'
 
-    model_dir = './output/p2_ded_bead_profile/v11.0'
-    model_name = f"240925-134412.8269.param_5.standardize.sample_1.enc_200.dec_100.pool_1.label_40.b64.no_auto_reg.lr_0.4e-5_0.985.loss_008812"
+    model_dir = './output/p2_ded_bead_profile/v13.1'
+    model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
 
     if TEST_MODE == 'deploy':  # deploy mode on
         deploy_trained_model(output_dir=output_dir,
@@ -308,7 +308,7 @@ if __name__ == '__main__':
                              dataset_dir=dataset_dir,
                              model_dir=model_dir,
                              model_name=model_name,
-                             use_all_dataset=False,
+                             use_all_dataset=True,
                              dataset_file_ratio=[0, 1],
                              self_reg=False)
     else:
