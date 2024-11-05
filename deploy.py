@@ -192,12 +192,12 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
         saliency_map_pos_mean = np.mean(saliency_map_pos_stack, axis=0)
 
         os.makedirs(os.path.join(config.machine_output_dir, 'temp'), exist_ok=True)
-        saliency_map_img_mean.save(
-            os.path.join(config.machine_output_dir, 'temp', f'saliency_map_img.{test_mode}.{extra_name}.npy'))
-        saliency_map_param_mean.save(
-            os.path.join(config.machine_output_dir, 'temp', f'saliency_map_param.{test_mode}.{extra_name}.npy'))
-        saliency_map_pos_mean.save(
-            os.path.join(config.machine_output_dir, 'temp', f'saliency_map_pos.{test_mode}.{extra_name}.npy'))
+        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_img.{test_mode}.{extra_name}.npy'),
+                saliency_map_img_mean)
+        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_param.{test_mode}.{extra_name}.npy'),
+                saliency_map_param_mean)
+        np.save(os.path.join(config.machine_output_dir, 'temp', f'saliency_map_pos.{test_mode}.{extra_name}.npy'),
+                saliency_map_pos_mean)
 
         # extra info saving
         temp_header = ['dataset_len']
@@ -210,12 +210,14 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
 
 
 def deploy_trained_model(output_dir,
-                         extra_name,
-                         dataset_dir,
-                         model_dir,
-                         model_name,
+                         extra_name='',
+                         dataset_dir='',
+                         model_dir='',
+                         model_name='',
+                         use_all_wts_files=False,
                          use_all_dataset=True,
                          dataset_file_ratio=[0, 1],
+                         target_dataset=None,
                          self_reg=False):
     # setup local environment
     machine_config = load_attribute_dict('machine.yaml')
@@ -233,7 +235,6 @@ def deploy_trained_model(output_dir,
 
     # copy model to target dir
     shutil.copy(src=os.path.join(machine_model_dir, 'best_model_stats.csv'), dst=config.machine_output_dir)
-    shutil.copy(src=os.path.join(machine_model_dir, 'best_model_wts.pth'), dst=config.machine_output_dir)
 
     '''system override'''
     config.enable_deploy_dataset = True
@@ -251,65 +252,87 @@ def deploy_trained_model(output_dir,
     model, adaptor, criterion, metric, _, _ = get_model(config)
 
     # Load the best model weights
-    best_model_path = os.path.join(config.machine_output_dir, 'best_model_wts.pth')
-    # state_dict = torch.load(best_model_path, weights_only=True)
-    # new_state_dict = {}
-    # for k, v in state_dict.items():
-    #     if not k.startswith('module.'):
-    #         new_state_dict[f"module.{k}"] = v
-    # model.load_state_dict(new_state_dict)
-    model.load_state_dict(torch.load(best_model_path))
-
-    # Move the model to the appropriate device
-    model = model.to(config.device)
-
-    ''' Load the test dataset '''
-    if use_all_dataset:
-        file_list = [file for file in os.listdir(config.machine_dataset_dir) if file.endswith('.pt')]
+    best_model_wts_list = []
+    if not use_all_wts_files:
+        best_model_wts_list.append('best_model_wts.pth')
     else:
-        file_list = config.dataset_exclude_for_deploy
+        best_model_wts_list = [file_name for file_name in os.listdir(machine_model_dir)
+                               if file_name.endswith('.pth') and 'ep' in file_name]
 
-    file_num = int(len(file_list))
-    file_list = file_list[int(file_num * dataset_file_ratio[0]):int(file_num * dataset_file_ratio[1])]
+    for best_model_wts_file in best_model_wts_list:
+        print(f'\n> best_model_wts_file: {best_model_wts_file}')
+        shutil.copy(src=os.path.join(machine_model_dir, best_model_wts_file), dst=config.machine_output_dir)
 
-    for dataset_name in file_list:
-        if config.enable_seed:
-            seed_everything(seed=config.seed)
+        model.load_state_dict(torch.load(os.path.join(config.machine_output_dir, best_model_wts_file)))
 
-        config.dataset_name = dataset_name
-        dataset = MyDataset(config)
-        if config.enable_standardize_feature:
-            dataset.apply_standardization(config)
-        if config.enable_exclude_feature:
-            dataset.apply_exclusion(config)
-        _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
+        # Move the model to the appropriate device
+        model = model.to(config.device)
 
-        # Test the model
-        print(f"\n> Deploying on dataset: {dataset_name}")
-        testify(config, model, adaptor, criterion, metric, dataset, test_loader,
-                test_mode='deploy', extra_name=dataset_name)
+        ''' Load the test dataset '''
+        if target_dataset is not None:
+            file_list = [target_dataset]
+        elif use_all_dataset:
+            file_list = [file for file in os.listdir(config.machine_dataset_dir) if file.endswith('.pt')]
+        else:
+            file_list = config.dataset_exclude_for_deploy
+
+        file_num = int(len(file_list))
+        file_list = file_list[int(file_num * dataset_file_ratio[0]):int(file_num * dataset_file_ratio[1])]
+
+        for dataset_name in file_list:
+            if config.enable_seed:
+                seed_everything(seed=config.seed)
+
+            config.dataset_name = dataset_name
+            dataset = MyDataset(config)
+            if config.enable_standardize_feature:
+                dataset.apply_standardization(config)
+            if config.enable_exclude_feature:
+                dataset.apply_exclusion(config)
+            _, _, test_loader = get_dataloaders(dataset, config, shuffle=False)
+
+            # Test the model
+            print(f"\n> Deploying on dataset: {dataset_name}")
+            testify(config, model, adaptor, criterion, metric, dataset, test_loader,
+                    test_mode='deploy',
+                    extra_name=f'{dataset_name}.{best_model_wts_file}')
 
 
 if __name__ == '__main__':
-    TEST_MODE = 'deploy'
+    # TEST_MODE = 'deploy_for_all_dataset'
+    TEST_MODE = 'deploy_multi_models_wts_on_one_dataset'
     # TEST_MODE = 'test-Saliency'
 
     output_dir = './output/p2_ded_bead_profile/v13.1.d'
-    extra_name = 'all_datasets'
+    extra_name = 'deploy_multi_model_wts_2'
 
     dataset_dir = './dataset/p2_ded_bead_profile/20240919'
 
     model_dir = './output/p2_ded_bead_profile/v13.1'
     model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
 
-    if TEST_MODE == 'deploy':  # deploy mode on
+    if TEST_MODE == 'deploy_for_all_dataset':  # deploy mode on
+        deploy_trained_model(output_dir=output_dir,
+                             extra_name=extra_name,
+                             dataset_dir=dataset_dir,
+
+                             model_dir=model_dir,
+                             model_name=model_name,
+                             use_all_wts_files=False,
+                             use_all_dataset=True,
+                             dataset_file_ratio=[0, 1],
+                             self_reg=False)
+
+    elif TEST_MODE == 'deploy_multi_models_wts_on_one_dataset':
         deploy_trained_model(output_dir=output_dir,
                              extra_name=extra_name,
                              dataset_dir=dataset_dir,
                              model_dir=model_dir,
                              model_name=model_name,
-                             use_all_dataset=True,
+                             use_all_wts_files=True,
+                             use_all_dataset=False,
                              dataset_file_ratio=[0, 1],
+                             target_dataset='Low_noise_tooth_2_dataset.pt',
                              self_reg=False)
     else:
         pass

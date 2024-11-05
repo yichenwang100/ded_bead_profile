@@ -29,6 +29,7 @@ def train(config):
 
     # Set up model, loss function, etc.
     model, adaptor, criterion, metric, optimizer, scheduler = get_model(config)
+    model_param_num = get_model_parameter_num(model)
     enable_auto_regression = (config.decoder_option == 'transformer')
 
     # Create logger using tensorboard
@@ -342,7 +343,25 @@ def train(config):
 
                 best_model_saved = True
 
-    return model, epoch_stats
+    '''-------------------------------------------------------------------------------------------------'''
+    ''' Properly release memory '''
+    '''-------------------------------------------------------------------------------------------------'''
+
+    # After training loop ends
+    if config.enable_tensorboard:
+        logger.close()
+
+    # Move model to CPU and delete it
+    model.to('cpu')
+    for gpu_object in [model, adaptor, criterion, metric, optimizer, scheduler]:
+        if gpu_object is not None:
+            del gpu_object
+
+    import gc  # python's garbage collector
+    gc.collect()
+    torch.cuda.empty_cache()    # release unused memory
+
+    return model_param_num, epoch_stats
 
 if __name__ == '__main__':
     config = get_config_from_cmd(argparse.ArgumentParser())
@@ -368,9 +387,9 @@ if __name__ == '__main__':
                 config_train.enable_save_best_model = False
                 config_train.enable_save_attention = False
 
-                model, epoch_stats = train(config_train)
+                model_param_num, epoch_stats = train(config_train)
 
-                model_len_list.append(get_model_parameter_num(model))
+                model_len_list.append(model_param_num)
                 epoch_stats_list.append(epoch_stats)
 
             print(model_len_list)
