@@ -210,6 +210,21 @@ class MyDataset(Dataset):
         idx_ego = self.raw_data_index[raw_index].cpu() + index_shift
         return self.data_tensor[idx_ego]
 
+    def clear_mem(self):
+        self.data_img.to('cpu')
+        del self.data_img
+
+        self.data_param.to('cpu')
+        del self.data_param
+
+        self.data_pos.to('cpu')
+        del self.data_pos
+
+        self.data_label.to('cpu')
+        del self.data_label
+
+        del self.data_tensor
+
 
 class MyCombinedDataset(Dataset):
     def __init__(self, config):
@@ -278,6 +293,9 @@ class MyCombinedDataset(Dataset):
                     dataset_index = index - self.cumulative_sizes[i_dataset - 1]
                 return self.datasets[i_dataset].get_raw_data(dataset_index)
 
+    def clear_mem(self):
+        for dataset in self.datasets:
+            dataset.clear_mem()
 
 def split_dataset(dataset, config, shuffle=True):
     # train, val, test split

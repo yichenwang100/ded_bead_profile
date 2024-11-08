@@ -1,6 +1,9 @@
 import torch, numpy as np, pandas as pd
 import torch.nn.functional as F
 import copy, time
+
+from pandas.io.common import file_exists
+
 from util import *
 from data import *
 from model import *
@@ -351,6 +354,9 @@ def train(config):
     if config.enable_tensorboard:
         logger.close()
 
+    # Remove dataset mem
+    dataset.clear_mem()
+
     # Move model to CPU and delete it
     model.to('cpu')
     for gpu_object in [model, adaptor, criterion, metric, optimizer, scheduler]:
@@ -397,26 +403,46 @@ if __name__ == '__main__':
 
         elif config.training_mode == 'seq_len_test':
             seq_len_list = [0, 5, 10, 25, 50, 100, 200, 300]
-            i_test = 0
+            total_list = []
             for look_ahead_len in seq_len_list:
                 for look_back_len in seq_len_list:
-                    i_test += 1
-                    if i_test % 4 == 3:     # split tasks
-                        total_seq_len = look_ahead_len + look_back_len + 1
+                    total_seq_len = look_ahead_len + look_back_len + 1
+                    total_list.append([total_seq_len, look_ahead_len, look_back_len])
 
-                        print('*'*50, '\n')
-                        print(f'> i_test: {i_test}/{len(seq_len_list)**2}'
-                              f', total len: {total_seq_len}'
-                              f', look ahead: {look_ahead_len}'
-                              f', look back: {look_back_len}')
-                        config_train = copy.deepcopy(config)
+            # Sort the list by total_seq_len (the first element in each sublist)
+            total_list.sort(key=lambda x: x[0])
 
-                        config_train.extra_name = f'enc_{total_seq_len}_ah_{look_ahead_len}'
-                        config_train.n_seq_enc_total = total_seq_len
-                        config_train.n_seq_enc_look_back = look_back_len
-                        config_train.n_seq_enc_look_ahead = look_ahead_len
+            for i_test, temp_list in enumerate(total_list):
+                if i_test % 4 == 3:     # split tasks
+                    total_seq_len = temp_list[0]
+                    look_ahead_len = temp_list[1]
+                    look_back_len = temp_list[2]
 
-                        model, epoch_stats = train(config_train)
+                    print('*'*50, '\n')
+                    print(f'> i_test: {i_test}/{len(total_list)}'
+                          f', total len: {total_seq_len}'
+                          f', look ahead: {look_ahead_len}'
+                          f', look back: {look_back_len}')
+                    config_train = copy.deepcopy(config)
+
+                    config_train.extra_name = f'enc_{total_seq_len}_ah_{look_ahead_len}'
+                    config_train.n_seq_enc_total = total_seq_len
+                    config_train.n_seq_enc_look_back = look_back_len
+                    config_train.n_seq_enc_look_ahead = look_ahead_len
+
+                    # check if the file exist:
+                    temp_title = config_train.extra_name
+                    temp_out_dir = os.path.join(config.data_root_dir, config.output_dir)
+                    is_file_existed = False
+                    for files in os.listdir(temp_out_dir):
+                        if temp_title in files:
+                            is_file_existed = True
+
+                    if is_file_existed:
+                        print(f'skipped, file ({config_train.extra_name}) existed')
+                        continue
+
+                    train(config_train)
 
     else:
         train(config)
