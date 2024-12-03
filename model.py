@@ -640,6 +640,7 @@ if __name__ == '__main__':
     ENABLE_PROFILING = False
 
     config = load_config()
+    setup_local_device(config)
 
     ''' I/O test '''
     # model_names = ['STEN_GP_FFD_TA', 'STEN_GP_FFD_BLSTM']

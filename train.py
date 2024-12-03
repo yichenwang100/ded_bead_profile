@@ -413,36 +413,35 @@ if __name__ == '__main__':
             total_list.sort(key=lambda x: x[0])
 
             for i_test, temp_list in enumerate(total_list):
-                if i_test % 4 == 3:     # split tasks
-                    total_seq_len = temp_list[0]
-                    look_ahead_len = temp_list[1]
-                    look_back_len = temp_list[2]
+                total_seq_len = temp_list[0]
+                look_ahead_len = temp_list[1]
+                look_back_len = temp_list[2]
 
-                    print('*'*50, '\n')
-                    print(f'> i_test: {i_test}/{len(total_list)}'
-                          f', total len: {total_seq_len}'
-                          f', look ahead: {look_ahead_len}'
-                          f', look back: {look_back_len}')
-                    config_train = copy.deepcopy(config)
+                print('*'*50, '\n')
+                print(f'> i_test: {i_test}/{len(total_list)}'
+                      f', total len: {total_seq_len}'
+                      f', look ahead: {look_ahead_len}'
+                      f', look back: {look_back_len}')
+                config_train = copy.deepcopy(config)
 
-                    config_train.extra_name = f'enc_{total_seq_len}_ah_{look_ahead_len}'
-                    config_train.n_seq_enc_total = total_seq_len
-                    config_train.n_seq_enc_look_back = look_back_len
-                    config_train.n_seq_enc_look_ahead = look_ahead_len
+                config_train.extra_name = f'enc_{total_seq_len}_ah_{look_ahead_len}'
+                config_train.n_seq_enc_total = total_seq_len
+                config_train.n_seq_enc_look_back = look_back_len
+                config_train.n_seq_enc_look_ahead = look_ahead_len
 
-                    # check if the file exist:
-                    temp_title = config_train.extra_name
-                    temp_out_dir = os.path.join(config.data_root_dir, config.output_dir)
-                    is_file_existed = False
-                    for files in os.listdir(temp_out_dir):
-                        if temp_title in files:
-                            is_file_existed = True
+                # check if the file exist:
+                temp_title = config_train.extra_name
+                temp_out_dir = os.path.join(config.data_root_dir, config.output_dir)
+                is_file_existed = False
+                for files in os.listdir(temp_out_dir):
+                    if temp_title in files:
+                        is_file_existed = True
 
-                    if is_file_existed:
-                        print(f'skipped, file ({config_train.extra_name}) existed')
-                        continue
+                if is_file_existed:
+                    print(f'skipped, file ({config_train.extra_name}) existed')
+                    continue
 
-                    train(config_train)
+                train(config_train)
 
     else:
         train(config)
