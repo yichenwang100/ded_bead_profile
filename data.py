@@ -53,8 +53,8 @@ map_param_str_to_show_name = {
     "CURVATURE":  'Curvature \n(1/mm)', # 8   # 2 # used
     "POWER": 'Power \n(W)', # 9   # 3 # used
     "FEEDRATE": 'Speed \n(mm/min)',  # 10  # 4 # used
-    "POWER_DIFF": 'Power\nChange Rate \n(W/s)',  # 11  # 5 # excluded
-    "FEEDRATE_DIFF": 'Speed\nChange Rate \n(mm/s^2)',  # 12  # 6 # excluded
+    "POWER_DIFF": 'Power Change \nRate (W/s)',  # 11  # 5 # excluded
+    "FEEDRATE_DIFF": 'Speed Change \nRate (mm/s^2)',  # 12  # 6 # excluded
 
     'EDR': 'EDR \n(J/mm)',
 
