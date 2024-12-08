@@ -103,6 +103,15 @@ def init_model_weights(m):
     elif isinstance(m, nn.Parameter):
         torch.nn.init.uniform_(m, a=0.0, b=1.0)
 
+
+# Function to recursively freeze parameters in all sub-modules of a given module
+def freeze_parameters(module):
+    for param in module.parameters():
+        param.requires_grad = False
+    for submodule in module.children():
+        freeze_parameters(submodule)
+
+
 import subprocess
 def get_gpu_memory():
     # Using `nvidia-smi` to get the memory usage of GPUs

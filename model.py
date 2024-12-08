@@ -562,8 +562,16 @@ class MyAdaptor(nn.Module):
 
 def get_model(config):
     # model
-    model = MyModel(config).to(config.device)
+    model = MyModel(config)
+    model = model.to(config.device)
     print(f'> model name: {config.model}, param num: {get_model_parameter_num(model)}')
+
+    if 'embed_require_grad' in config and config.embed_require_grad is False:
+        freeze_parameters(model.embedding)
+    if 'encoder_require_grad' in config and config.encoder_require_grad is False:
+        freeze_parameters(model.encoder)
+    if 'decoder_require_grad' in config and config.decoder_require_grad is False:
+        freeze_parameters(model.decoder)
 
     # auto parallel in multiple gpu
     if config.enable_gpu:
@@ -574,8 +582,29 @@ def get_model(config):
         else:
             model = nn.DataParallel(model, device_ids=[config.dp_core_idx])
 
+    # Init all params, ex using kaiming mothod
     if config.enable_param_init:
         model.apply(init_model_weights)
+
+    # Load pre-trained params from file
+    if 'enable_preload_param' in config and config.enable_preload_param is True:
+        preload_param = torch.load(config.preload_param_path)
+        preload_state_dict = {}
+
+        if config.embed_preload_param is True:
+            temp_state_dict = {k: v for k, v in preload_param.items() if k.startswith('module.embedding.')}
+            preload_state_dict.update(temp_state_dict)
+
+        if config.encoder_preload_param is True:
+            temp_state_dict = {k: v for k, v in preload_param.items() if k.startswith('module.encoder.')}
+            preload_state_dict.update(temp_state_dict)
+
+        if config.decoder_preload_param is True:
+            temp_state_dict = {k: v for k, v in preload_param.items() if k.startswith('module.decoder.')}
+            preload_state_dict.update(temp_state_dict)
+
+        model.load_state_dict(preload_state_dict, strict=False)
+
 
     # adaptor/reconstructor
     adaptor = None
@@ -644,7 +673,7 @@ if __name__ == '__main__':
 
     ''' I/O test '''
     # model_names = ['STEN_GP_FFD_TA', 'STEN_GP_FFD_BLSTM']
-    model_names = ['STEN_GP_FFD_BLSTM']
+    model_names = ['STEN_GP_BLSTM_FFD']
     total_params_list_list = []
     # H_list = [4, 6, 8]
     H_list = [6]

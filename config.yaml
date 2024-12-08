@@ -7,10 +7,10 @@ machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_rewrite_output_dir: True
-output_dir: './output/p2_ded_bead_profile/v13.1'  # relative to data_root_dir
+output_dir: './output/p2_ded_bead_profile/v19.9'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
 extra_name: 'param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812'
-training_mode: 'default' # training model: 'epoch_time_test', 'seq_len_test'
+training_mode: 'default' # training model: 'epoch_time_test', 'seq_len_test', 'ablation_test'
 
 # Data
 dataset_dir: './dataset/p2_ded_bead_profile/20240919'  # relative to data_root_dir
@@ -54,17 +54,21 @@ pos_exclude: [] # to be excluded from pos_size, start from 0
 pos_mean: []
 pos_std: []
 ## Feature / Output
-label_start_index: 13 # 6 for WHA, 7 for Sigmoid param, the rest for cropped data (53 for data 0730, 13+ for 0823/later)
-label_crop_size: 400  # crop from the original 600 points
-label_size: 40
+label_start_index: 0 # 0 for WHA, 7 for Sigmoid param, the rest for cropped data (53 for data 0730, 13+ for 0823/later)
+label_crop_size: 6  # 400 for dataset 0823/later, crop from the original 600 points
+label_size: 6
 label_noise_cutoff: 0.01
 
 # Model
 model: "STEN_GP_BLSTM_FFD"  # None, STEN_GP_FA_TA, STEN_GP_FFD, STEN_GP_TA_FFD, STEN_GP_FFD_TA, STEN_GP_FFD_BLSTM
 ## initialization
 enable_param_init: False  # default init method: kaiming_normal_
+enable_preload_param: True
+preload_param_path: 'C:\mydata\output\p2_ded_bead_profile\v13.1\241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812\best_model_wts.pth'
 ## embedding
 feature_embed_option: 'default' # 'fc', 'default'
+embed_preload_param: True
+embed_require_grad: False  # --- ABLATION + Transfer learning
 embed_dim: -1 # auto calculated
 ## embedding / Img
 enable_img_embed: True   # --- ABLATION
@@ -77,6 +81,8 @@ enable_pos_embed: True  # --- ABLATION
 pos_embed_exclude: None
 pos_embed_dim: 6
 ## encoder
+encoder_preload_param: True
+encoder_require_grad: False  # --- ABLATION + Transfer learning
 encoder_layer_size: 1   # --- ABLATION
 encoder_num_heads: 4
 enable_residual_gamma: False   # --- ABLATION
@@ -84,8 +90,10 @@ enable_layer_norm: True
 enable_dropout: True
 dropout: 0.3
 ## decoder
+decoder_preload_param: False
+decoder_require_grad: True  # --- ABLATION + Transfer learning
 decoder_option: 'default' # 'transformer'
-output_size: 40
+output_size: 6
 output_embed_dim: 6
 ## adaptor
 enable_adaptor: False
@@ -97,13 +105,13 @@ adaptor_component_size: 10
 enable_scheduled_sampling: False
 scheduled_sampling_max_epoch: 20
 ## criterion
-criterion_option: 'mae_mse_iou' # 'mse', 'iou', 'mse_iou', 'mae_mse_iou'
+criterion_option: 'mse' # 'mse', 'iou', 'mse_iou', 'mae_mse_iou'
 criterion_mae_lambda: 0.00
 criterion_mse_lambda: 0.88
 criterion_iou_lambda: 0.12
 enable_early_stopping: False
 ## metric
-metric_option: 'miou'  # 'mse', 'rmse', 'mape', 'mapa', 'mae', 'miou'
+metric_option: 'mapa'  # 'mse', 'rmse', 'mape', 'mapa', 'mae', 'miou'
 computation_eps: 1.0e-6
 ## optimizer
 num_epochs: 100
