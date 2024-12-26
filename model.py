@@ -311,6 +311,9 @@ class MyBiLSTMBlock(nn.Module):
         if self.enable_layer_norm:
             self.ln = nn.LayerNorm(self.hidden_dim)
 
+        print(f'> MyBiLSTMBlock param: {get_model_parameter_num(self)}')
+        print(f'    > lstm param: {get_model_parameter_num(self.lstm)}')
+
     def forward(self, x, reset_hx=True):
         if reset_hx:
             self.hx = None
@@ -395,6 +398,10 @@ class MyEncoder(nn.Module):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
 
         self.encoder = nn.Sequential(*layers)
+
+        print(f'> MyEncoder param: {get_model_parameter_num(self)}')
+        for i_layer, layer in enumerate(layers):
+            print(f'    > Layer: {i_layer + 1}: {get_model_parameter_num(layer)}')
 
     def forward(self, x):
         return self.encoder(x)

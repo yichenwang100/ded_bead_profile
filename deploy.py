@@ -7,7 +7,7 @@ from model import *
 from data import *
 
 # setup modes
-ENABLE_SAVE_SALIENCY = True
+ENABLE_SAVE_SALIENCY = False
 ENABLE_SAVE_DETAILED_OUTPUT = True
 TEST_BATCH_SIZE = 64
 
@@ -299,17 +299,24 @@ def deploy_trained_model(output_dir,
 
 
 if __name__ == '__main__':
-    # TEST_MODE = 'deploy_for_all_dataset'
-    TEST_MODE = 'deploy_multi_models_wts_on_one_dataset'
+    TEST_MODE = 'deploy_for_all_dataset'
+    extra_name = 'all_datasets'
+
+    # TEST_MODE = 'deploy_multi_models_wts_on_one_dataset'
+    # extra_name = 'deploy_multi_model_wts_2'
+
     # TEST_MODE = 'test-Saliency'
 
-    output_dir = './output/p2_ded_bead_profile/v13.1.d'
-    extra_name = 'deploy_multi_model_wts_2'
+    output_dir = './output/p2_ded_bead_profile/v20.4.d'
 
-    dataset_dir = './dataset/p2_ded_bead_profile/20240919'
+    dataset_dir = './dataset/p2_ded_bead_profile/20241225'
 
-    model_dir = './output/p2_ded_bead_profile/v13.1'
-    model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
+    # model_dir = './output/p2_ded_bead_profile/v13.1'
+    # model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
+
+    model_dir = './output/p2_ded_bead_profile/ubun.v16.2'
+    model_name = f"241128-013057.2494.wha.img_param_pos_111.standardize.sample_1.enc_201_ah_100.label_6.b64.lstm_ffd.lr_0.4e-5_0.985.mse-mapa"
+
 
     if TEST_MODE == 'deploy_for_all_dataset':  # deploy mode on
         deploy_trained_model(output_dir=output_dir,
