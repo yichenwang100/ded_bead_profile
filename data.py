@@ -1,4 +1,6 @@
 import os, shutil, sys, re
+import time
+
 from tqdm import tqdm
 
 import torch, torchvision
@@ -542,10 +544,12 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
     t_start = time.time()
     for index, row in df.iterrows():
         if index % 2000 == 0:
-            print(f'> dataset [{dataset_name}] '
-                  f'| index[{index}]/{len(df)} '
-                  f'| elapsed: {time.time() - t_start:.3f}s'
-                  f'| remaining: {(time.time() - t_start) / (index + 1) * (len(df) - index):.3f}s')
+            t_elapsed = time.time() - t_start
+            print(f'> dataset [{dataset_name}]'
+                  f' | index[{index}]/{len(df)}'
+                  f' | elapsed: {t_elapsed:.3f}s'
+                  f' | remaining: {t_elapsed / (index + 1) * (len(df) - index):.3f}s'
+                  f' | speed: {t_elapsed/(index+1)*1000}ms/frame')
         img_filename = row['IMG']
         img_path = os.path.join(img_root_dir, img_filename)
 
@@ -614,7 +618,8 @@ if __name__ == '__main__':
     # test_dataset()
     #
     img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20241225'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20241225'
-    # create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
-    create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)
+    # data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20241225'
+    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20241225_test'
+    create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
+    # create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)

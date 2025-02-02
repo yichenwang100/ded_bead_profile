@@ -188,7 +188,8 @@ class MyInputEmbedding(nn.Module):
                 config.param_exclude = []
             adjusted_param_size = config.param_size - len(config.param_exclude)
             self.hidden_dim += config.param_embed_dim * adjusted_param_size
-            self.param_embed = MyEmbeddingBlock(adjusted_param_size, config.param_embed_dim, config.feature_embed_option)
+            self.param_embed = MyEmbeddingBlock(adjusted_param_size, config.param_embed_dim,
+                                                config.feature_embed_option)
 
         self.enable_pos_embed = config.enable_pos_embed
         if self.enable_pos_embed:
@@ -209,8 +210,87 @@ class MyInputEmbedding(nn.Module):
         return x  # (B, N, H_b)
 
 
+class MySimpleModelBlock(nn.Module):
+    def __init__(self, config, hidden_dim, model='None'):
+        super().__init__()
+
+        self.hidden_dim = hidden_dim
+        self.model_name = model
+
+        self.only_one_frame = False
+        self.enable_rnn = False
+        self.enable_attention = False
+
+        if model == 'MLP':  # Multi-layer perception
+            self.fc1 = nn.Linear(self.hidden_dim, self.hidden_dim)
+            self.relu = nn.ReLU()
+            self.fc2 = nn.Linear(self.hidden_dim, self.hidden_dim)
+
+            self.base_model = nn.Sequential(self.fc1, self.relu, self.fc2)
+
+        elif model == 'RNN':
+            self.base_model = nn.RNN(input_size=self.hidden_dim,
+                                     hidden_size=self.hidden_dim,
+                                     num_layers=1,
+                                     batch_first=True,
+                                     bidirectional=False,
+                                     )
+            self.enable_rnn = True
+
+        elif model == 'LSTM':
+            self.base_model = nn.LSTM(input_size=self.hidden_dim,
+                                      hidden_size=self.hidden_dim,
+                                      num_layers=1,
+                                      batch_first=True,
+                                      bidirectional=False,
+                                      )
+            self.enable_rnn = True
+
+        elif model == 'BLSTM':
+            self.base_model = nn.LSTM(input_size=self.hidden_dim,
+                                      hidden_size=self.hidden_dim // 2,
+                                      num_layers=1,
+                                      batch_first=True,
+                                      bidirectional=True,
+                                      )
+            self.enable_rnn = True
+
+        elif model == 'SA':  # self-attention
+            self.base_model = nn.MultiheadAttention(config.embed_dim,
+                                                    num_heads=1,
+                                                    dropout=config.dropout if config.enable_dropout else 0,
+                                                    batch_first=True)
+            self.enable_attention = True
+
+        elif model == 'MHSA-4':  # multi-head self-attention
+            self.base_model = nn.MultiheadAttention(config.embed_dim,
+                                                    num_heads=4,
+                                                    dropout=config.dropout if config.enable_dropout else 0,
+                                                    batch_first=True)
+            self.enable_attention = True
+
+        elif model == 'GNN':  # graph neural networks
+            # self.base_model = nn.GNN
+            pass
+
+        elif model == 'GCN':
+            pass
+
+        else:
+            raise RuntimeError(f'Unknown model: {model}')
+
+    def forward(self, x):
+        if self.enable_rnn:
+            x, _ = self.base_model(x, hx=None)
+            return x
+        elif self.enable_attention:
+            return self.base_model(x, x, x, need_weights=False)[0]
+        else:
+            return self.base_model(x)
+
+
 class MyFeatureAttnBlock(nn.Module):
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, config):
         super().__init__()
 
         self.enable_residual_gamma = config.enable_residual_gamma
@@ -253,7 +333,7 @@ class MyFeatureAttnBlock(nn.Module):
 
 
 class MyTemporalAttnBlock(nn.Module):
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, config):
         super().__init__()
 
         self.enable_residual_gamma = config.enable_residual_gamma
@@ -292,18 +372,29 @@ class MyTemporalAttnBlock(nn.Module):
         return x
 
 
-class MyBiLSTMBlock(nn.Module):
-    def __init__(self, config, hidden_dim, bidirectional=True):
+class MyRnnBlock(nn.Module):
+    def __init__(self, config, hidden_dim, model='LSTM', bidirectional=True, ):
         super().__init__()
         self.hidden_dim = hidden_dim
 
         # temporal wise attn
-        self.lstm = nn.LSTM(input_size=self.hidden_dim,
-                            hidden_size=self.hidden_dim // 2 if bidirectional else self.hidden_dim,
-                            num_layers=1,
-                            batch_first=True,
-                            bidirectional=bidirectional,
-                            )
+        if model == 'LSTM':
+            self.base_model = nn.LSTM(input_size=self.hidden_dim,
+                                      hidden_size=self.hidden_dim // 2 if bidirectional else self.hidden_dim,
+                                      num_layers=1,
+                                      batch_first=True,
+                                      bidirectional=bidirectional,
+                                      )
+        elif model == 'RNN':
+            self.base_model = nn.LSTM(input_size=self.hidden_dim,
+                                      hidden_size=self.hidden_dim // 2 if bidirectional else self.hidden_dim,
+                                      num_layers=1,
+                                      batch_first=True,
+                                      bidirectional=bidirectional,
+                                      )
+        else:
+            raise RuntimeError(f'Unknown model: {model}')
+
         self.hx = None
 
         # layer norm
@@ -312,13 +403,13 @@ class MyBiLSTMBlock(nn.Module):
             self.ln = nn.LayerNorm(self.hidden_dim)
 
         print(f'> MyBiLSTMBlock param: {get_model_parameter_num(self)}')
-        print(f'    > lstm param: {get_model_parameter_num(self.lstm)}')
+        print(f'    > lstm param: {get_model_parameter_num(self.base_model)}')
 
     def forward(self, x, reset_hx=True):
         if reset_hx:
             self.hx = None
 
-        x, self.hx = self.lstm(x, hx=self.hx)
+        x, self.hx = self.base_model(x, hx=self.hx)
 
         if self.enable_layer_norm:
             x = self.ln(x)
@@ -371,10 +462,10 @@ class MyEncoder(nn.Module):
         if config.model == 'STEN_GP_FFD_BLSTM':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
-                layers.append(MyBiLSTMBlock(config, self.hidden_dim))
+                layers.append(MyRnnBlock(config, self.hidden_dim, model='LSTM', bidirectional=True))
         elif config.model == 'STEN_GP_BLSTM_FFD':
             for _ in range(config.encoder_layer_size):
-                layers.append(MyBiLSTMBlock(config, self.hidden_dim))
+                layers.append(MyRnnBlock(config, self.hidden_dim, model='LSTM', bidirectional=True))
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FFD_TA':
             for _ in range(config.encoder_layer_size):
@@ -391,11 +482,20 @@ class MyEncoder(nn.Module):
         elif config.model == 'STEN_GP_FFD':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
-        else:  # default setup
-            for _ in range(config.encoder_layer_size):
-                layers.append(MyFeatureAttnBlock(config))
-                layers.append(MyTemporalAttnBlock(config))
-                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
+        elif config.model == 'STEN_GP_Simple_MLP':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MLP'))
+        elif config.model == 'STEN_GP_Simple_RNN':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='RNN'))
+        elif config.model == 'STEN_GP_Simple_LSTM':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='LSTM'))
+        elif config.model == 'STEN_GP_Simple_BLSTM':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='BLSTM'))
+        elif config.model == 'STEN_GP_Simple_SA':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='SA'))
+        elif config.model == 'STEN_GP_Simple_MHSA':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-4'))
+        else:
+            raise RuntimeError(f'Unknown model: {config.model}')
 
         self.encoder = nn.Sequential(*layers)
 
@@ -442,7 +542,7 @@ class MyDecoderPlus(nn.Module):
         # st layer
         self.output_latent_dim = config.output_size * config.output_embed_dim
         self.st_layer_1 = MyFeedForwardBlock(config, self.output_latent_dim)
-        self.st_layer_2 = MyBiLSTMBlock(config, self.output_latent_dim, bidirectional=False)
+        self.st_layer_2 = MyRnnBlock(config, self.output_latent_dim, bidirectional=False)
         self.hx = None
 
         # output
@@ -485,13 +585,43 @@ class MyModel(nn.Module):
         self.timing_on = False
 
     def forward(self, x_img, x_param, x_pos, y_prev=None, reset_dec_hx=False):
-        x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
-        x = self.encoder(x)  # (B, N, H_c)
-        if self.enable_auto_regression:
-            x = self.decoder(x, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
+        if self.timing_on:
+            LAYER_TIMING_NUM = 10000
+            t_start = time.time()
+            for i_time in range(LAYER_TIMING_NUM):
+                x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
+            t_emb = (time.time() - t_start) / LAYER_TIMING_NUM
+
+            x_temp = x
+            t_start = time.time()
+            for i_time in range(LAYER_TIMING_NUM):
+                x = self.encoder(x_temp)  # (B, N, H_c)
+            t_enc = (time.time() - t_start) / LAYER_TIMING_NUM
+
+            x_temp = x
+            t_start = time.time()
+            for i_time in range(LAYER_TIMING_NUM):
+                if self.enable_auto_regression:
+                    x = self.decoder(x_temp, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
+                else:
+                    x = self.decoder(x_temp)
+            t_dec = (time.time() - t_start) / LAYER_TIMING_NUM
+
+            t_total = t_emb + t_enc + t_dec
+            self.t_emb = t_emb
+            self.t_enc = t_enc
+            self.t_dec = t_dec
+            self.t_total = t_total
+            print(f'> emb:{t_emb * 1000}ms, enc:{t_enc * 1000}ms, dec:{t_dec * 1000}ms, total:{t_total * 1000}ms')
+            return x
         else:
-            x = self.decoder(x)
-        return x
+            x = self.embedding(x_img, x_param, x_pos)  # (B, N, H_b)
+            x = self.encoder(x)  # (B, N, H_c)
+            if self.enable_auto_regression:
+                x = self.decoder(x, y_prev, reset_hx=reset_dec_hx)  # (B, N, output_size)
+            else:
+                x = self.decoder(x)
+            return x
 
 
 '''***********************************************************************'''
@@ -612,7 +742,6 @@ def get_model(config):
 
         model.load_state_dict(preload_state_dict, strict=False)
 
-
     # adaptor/reconstructor
     adaptor = None
     if config.enable_adaptor:
@@ -674,99 +803,128 @@ def get_model(config):
 
 if __name__ == '__main__':
     ENABLE_PROFILING = False
+    ENABLE_LAYER_TIMING = False
+    ENABLE_MODEL_SUMMARY = True
 
     config = load_config()
     setup_local_device(config)
 
     ''' I/O test '''
-    # model_names = ['STEN_GP_FFD_TA', 'STEN_GP_FFD_BLSTM']
-    model_names = ['STEN_GP_BLSTM_FFD']
+
+    model_names = [
+        'STEN_GP_Simple_MLP',
+        'STEN_GP_Simple_RNN', 'STEN_GP_Simple_LSTM', 'STEN_GP_Simple_BLSTM',
+        'STEN_GP_Simple_SA', 'STEN_GP_Simple_MHSA',
+        'STEN_GP_BLSTM_FFD',
+    ]
+    # model_names = ['STEN_GP_BLSTM_FFD']
     total_params_list_list = []
-    # H_list = [4, 6, 8]
-    H_list = [6]
-    for H in H_list:
-        ''' Design embedding size '''
-        print(f"\n> config embedding design...")
-        total_params_list = []
-        stl_params_list = []
-        stl_params_pct = []
-        config.param_embed_dim = H
-        config.pos_embed_dim = H
-        config.embed_dim = (config.img_embed_dim +
-                            config.param_embed_dim * config.param_size +
-                            config.pos_embed_dim * config.pos_size)
-        print(f"> config.param_embed_dim = {H}, config.pos_embed_dim = {H}")
-        print(f"> config.embed_dim = {config.embed_dim}")
+    timing_history_list = []
+    # INPUT_LEN_LIST = [25*k for k in range(1, 31)]
+    INPUT_LEN_LIST = [200]
+    for INPUT_LEN in INPUT_LEN_LIST:
+        # H_list = [4, 6, 8]
+        H_list = [6]
+        for H in H_list:
+            ''' Design embedding size '''
+            print('>' * 100)
+            print(f"\n> config embedding design...")
+            total_params_list = []
+            stl_params_list = []
+            stl_params_pct = []
+            config.batch_size = 1
+            config.param_embed_dim = H
+            config.pos_embed_dim = H
+            config.embed_dim = (config.img_embed_dim +
+                                config.param_embed_dim * config.param_size +
+                                config.pos_embed_dim * config.pos_size)
+            config.n_seq_enc_look_back = INPUT_LEN
+            config.n_seq_enc_look_ahead = 0
+            config.n_seq_enc_total = INPUT_LEN + 1
+            config.enable_preload_param = False
+            print(f"> config.param_embed_dim = {H}, config.pos_embed_dim = {H}")
+            print(f"> config.embed_dim = {config.embed_dim}")
+            print(f"> n_seq_enc_total = {config.n_seq_enc_total}")
 
-        ''' Design input '''
-        print(f"\n> input design...")
-        B = config.batch_size  # batch size
-        N = config.n_seq_enc_total
+            ''' Design input '''
+            print(f"\n> input design...")
+            B = config.batch_size  # batch size
+            N = config.n_seq_enc_total
 
-        x_img = torch.randn(B, N, config.img_embed_dim).to(config.device)
-        x_param = torch.randn(B, N, config.param_size).to(config.device)
-        x_pos = torch.randn(B, N, config.pos_size).to(config.device)
-        y_prev = torch.randn(B, config.n_seq_enc_look_back, config.output_size).to(config.device)
-        y = torch.randn(B, config.output_size).to(config.device)
+            x_img = torch.randn(B, N, config.img_embed_dim).to(config.device)
+            x_param = torch.randn(B, N, config.param_size).to(config.device)
+            x_pos = torch.randn(B, N, config.pos_size).to(config.device)
+            y_prev = torch.randn(B, config.n_seq_enc_look_back, config.output_size).to(config.device)
+            y = torch.randn(B, config.output_size).to(config.device)
 
-        print("> device: ", config.device)
-        print("> x_img shape: ", x_img.shape)
-        print("> x_param shape: ", x_param.shape)
-        print("> x_pos shape: ", x_pos.shape)
-        print("> y shape: ", y.shape)
+            print("> device: ", config.device)
+            print("> x_img shape: ", x_img.shape)
+            print("> x_param shape: ", x_param.shape)
+            print("> x_pos shape: ", x_pos.shape)
+            print("> y shape: ", y.shape)
 
-        print(f"\n> model design...")
-        for model_name in model_names:
-            print('\n')
-            print('>' * 50)
-            print('> model: ', model_name)
-            config.model = model_name
-            model, _, _, _, _, _ = get_model(config)
-            total_params = get_model_parameter_num(model)
-            total_params_list.append(total_params)
-            print('> model param size: ', total_params)
-            print('> model neuron num: ', get_model_neuron_num(model))
-            model.timing_on = False  # print timing of each layer
-            if config.decoder_option == 'transformer':
-                y = model(x_img, x_param, x_pos, y_prev)
-            else:
-                y = model(x_img, x_param, x_pos)
-            print("> output shape", y.shape)
+            for model_name in model_names:
+                print('')
+                print('>' * 50)
+                print('> model: ', model_name)
+                config.model = model_name
+                model, _, _, _, _, _ = get_model(config)
+                total_params = get_model_parameter_num(model.module)
+                total_params_list.append(total_params)
+                print('> model param size: ', total_params)
+                print('> model neuron num: ', get_model_neuron_num(model))
+                model.module.timing_on = ENABLE_LAYER_TIMING  # print timing of each layer
+                if ENABLE_LAYER_TIMING:
+                    model.eval()
+                    print('> layer timing on...')
+                if config.decoder_option == 'transformer':
+                    y = model(x_img, x_param, x_pos, y_prev)
+                else:
+                    y = model(x_img, x_param, x_pos)
+                print("> output shape", y.shape)
 
-            from torchinfo import summary
+                if ENABLE_LAYER_TIMING:
+                    timing_history_list.append([config.n_seq_enc_total,
+                                                model.module.t_emb, model.module.t_enc, model.module.t_dec,
+                                                model.module.t_total])
+                    model.module.timing_on = False  # disable for following analysis
 
-            model.timing_on = False
-            if config.decoder_option == 'transformer':
-                summary(model, input_size=[x_img.shape, x_param.shape, x_pos.shape, y_prev.shape])
-            else:
-                summary(model, input_size=[x_img.shape, x_param.shape, x_pos.shape])
+                if ENABLE_MODEL_SUMMARY:
+                    from torchinfo import summary
 
-            if ENABLE_PROFILING:
-                '''Profile the forward pass'''
-                import torch.profiler
+                    if config.decoder_option == 'transformer':
+                        summary(model, input_size=[x_img.shape, x_param.shape, x_pos.shape, y_prev.shape])
+                    else:
+                        summary(model, input_size=[x_img.shape, x_param.shape, x_pos.shape])
 
-                num_iterations = 200
-                with torch.profiler.profile(
-                        activities=[
-                            torch.profiler.ProfilerActivity.CPU,
-                            torch.profiler.ProfilerActivity.CUDA,
-                        ],
-                        schedule=torch.profiler.schedule(wait=1, warmup=1, active=num_iterations),
-                        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/my_embedding_profile'),
-                        record_shapes=True,
-                        profile_memory=True,
-                        with_stack=True
-                ) as prof:
-                    time_start = time.time()
-                    for _ in range(num_iterations):
-                        output = model.embedding(x_img, x_param, x_pos)
-                        prof.step()
+                if ENABLE_PROFILING:
+                    '''Profile the forward pass'''
+                    import torch.profiler
 
-                print(f"total elapsed time: {(time.time() - time_start) * 1000:.3f}ms")
-                print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
+                    num_iterations = 200
+                    with torch.profiler.profile(
+                            activities=[
+                                torch.profiler.ProfilerActivity.CPU,
+                                torch.profiler.ProfilerActivity.CUDA,
+                            ],
+                            schedule=torch.profiler.schedule(wait=1, warmup=1, active=num_iterations),
+                            on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/my_embedding_profile'),
+                            record_shapes=True,
+                            profile_memory=True,
+                            with_stack=True
+                    ) as prof:
+                        time_start = time.time()
+                        for _ in range(num_iterations):
+                            output = model(x_img, x_param, x_pos)
+                            prof.step()
 
-        total_params_list_list.append(total_params_list)
+                    print(f"total elapsed time: {(time.time() - time_start) * 1000:.3f}ms")
+                    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
 
-    for i_list, _param_list in enumerate(total_params_list_list):
-        print(f"> param list for H = {H_list[i_list]}: ",
-              [int_split_by_comma(num) for num in _param_list])
+            total_params_list_list.append(total_params_list)
+
+    print('> total param')
+    print(total_params_list_list)
+
+    print(f"> timing history:")
+    print(timing_history_list)

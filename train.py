@@ -443,5 +443,24 @@ if __name__ == '__main__':
 
                 train(config_train)
 
+        elif config.training_mode == 'benchmark_test':
+            model_names = [
+                'STEN_GP_Simple_MLP',
+                'STEN_GP_Simple_RNN', 'STEN_GP_Simple_LSTM', 'STEN_GP_Simple_BLSTM',
+            ]
+            # model_names = [
+            #     'STEN_GP_Simple_SA', 'STEN_GP_Simple_MHSA',
+            # ]
+
+            for i_test, model_name in enumerate(model_names):
+                print('*'*50, '\n')
+                print(f'> i_test: {i_test}/{len(model_names)}'
+                      f', model_name: {model_name}')
+                config_train = copy.deepcopy(config)
+
+                config_train.extra_name = f'enc_{model_name}'
+                config_train.model = model_name
+
+                train(config_train)
     else:
         train(config)

@@ -8,7 +8,7 @@ from data import *
 
 # setup modes
 ENABLE_SAVE_SALIENCY = False
-ENABLE_SAVE_DETAILED_OUTPUT = True
+ENABLE_SAVE_DETAILED_OUTPUT = False
 TEST_BATCH_SIZE = 64
 
 
@@ -65,6 +65,7 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
     if enable_auto_regression:
         y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=config.device)
 
+    t_start = time.time()
     for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(data_loader):
         # x, y = x.to(config.device), y.to(config.device)
 
@@ -133,9 +134,11 @@ def testify(config, model, adaptor, criterion, metric, dataset, data_loader, tes
             # feature_attn_sum += model.encoder.encoder[0].attn_map.cpu().detach().squeeze(0)
             # temporal_attn_sum += model.encoder.encoder[1].attn_map.cpu().detach().squeeze(0)
 
+        process_speed = (time.time() - t_start) / (i_loader + 1)
         progress_bar.set_description(f"Step [{i_loader}/{len(data_loader)}]"
                                      f", L:{val_loss_sum / (i_loader + 1):.4f}"
                                      f", metric:{val_metric_sum / (i_loader + 1):.3f}"
+                                     f", speed: {process_speed:.4f} ms/frame"
                                      f"\t>>>")
         progress_bar.update()
 
@@ -311,11 +314,11 @@ if __name__ == '__main__':
 
     dataset_dir = './dataset/p2_ded_bead_profile/20241225'
 
-    # model_dir = './output/p2_ded_bead_profile/v13.1'
-    # model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
+    model_dir = './output/p2_ded_bead_profile/v13.1'
+    model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
 
-    model_dir = './output/p2_ded_bead_profile/ubun.v16.2'
-    model_name = f"241128-013057.2494.wha.img_param_pos_111.standardize.sample_1.enc_201_ah_100.label_6.b64.lstm_ffd.lr_0.4e-5_0.985.mse-mapa"
+    # model_dir = './output/p2_ded_bead_profile/ubun.v16.2'
+    # model_name = f"241128-013057.2494.wha.img_param_pos_111.standardize.sample_1.enc_201_ah_100.label_6.b64.lstm_ffd.lr_0.4e-5_0.985.mse-mapa"
 
 
     if TEST_MODE == 'deploy_for_all_dataset':  # deploy mode on

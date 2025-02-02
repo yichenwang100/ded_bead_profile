@@ -10,7 +10,7 @@ enable_rewrite_output_dir: True
 output_dir: './output/p2_ded_bead_profile/v19.9'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
 extra_name: 'param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812'
-training_mode: 'default' # training model: 'epoch_time_test', 'seq_len_test', 'ablation_test'
+training_mode: 'benchmark_test' # training model: 'default', 'epoch_time_test', 'seq_len_test', 'benchmark_test'
 
 # Data
 dataset_dir: './dataset/p2_ded_bead_profile/20240919'  # relative to data_root_dir
