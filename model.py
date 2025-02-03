@@ -210,6 +210,48 @@ class MyInputEmbedding(nn.Module):
         return x  # (B, N, H_b)
 
 
+from torch_geometric.nn import GCNConv
+from torch_geometric.data import Data
+
+class GNNSequenceProcessor(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2, batch_first=True):
+        super().__init__()
+        self.batch_first = batch_first
+
+        # Create a list of GCNConv layers
+        self.gcns = nn.ModuleList()
+        self.gcns.append(GCNConv(input_dim, hidden_dim))  # First GCN layer
+
+        # Add additional GCNConv layers (num_layers - 1)
+        for _ in range(num_layers - 1):
+            self.gcns.append(GCNConv(hidden_dim, output_dim))  # Subsequent GCN layers
+
+    def forward(self, x):
+        # x has shape (batch_size, seq_len, input_dim) when batch_first=True
+        batch_size, seq_len, input_dim = x.shape
+
+        # Step 1: Convert input tensor to graph format
+        edge_index = []
+        for i in range(seq_len - 1):  # connect each node to its next node
+            edge_index.append([i, i + 1])
+
+        edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous().to(x.device)
+
+        # Flatten the input tensor to have shape (num_nodes, input_dim)
+        node_features = x.view(-1, input_dim)
+
+        # Create a PyTorch Geometric Data object
+        data = Data(x=node_features, edge_index=edge_index).to(x.device)
+
+        # Step 2: Apply GCN layers
+        out = data.x
+        for gcn in self.gcns:
+            out = gcn(out, data.edge_index)  # Apply GCN layer
+
+        # Return the output node features (now of shape [batch_size * seq_len, hidden_dim])
+        return data.x.view(batch_size, seq_len, -1)  # Reshape back to [batch_size, seq_len, hidden_dim]
+
+
 class MySimpleModelBlock(nn.Module):
     def __init__(self, config, hidden_dim, model='None'):
         super().__init__()
@@ -263,19 +305,23 @@ class MySimpleModelBlock(nn.Module):
             self.enable_attention = True
 
         elif model == 'MHSA-4':  # multi-head self-attention
-            self.base_model = nn.MultiheadAttention(config.embed_dim,
+            self.base_model = nn.MultiheadAttention(self.hidden_dim,
                                                     num_heads=4,
                                                     dropout=config.dropout if config.enable_dropout else 0,
                                                     batch_first=True)
             self.enable_attention = True
 
-        elif model == 'GNN':  # graph neural networks
-            # self.base_model = nn.GNN
-            pass
-
-        elif model == 'GCN':
-            pass
-
+        elif model == 'GCN-1':  # graph neural networks
+            self.base_model = GNNSequenceProcessor(input_dim=self.hidden_dim,
+                                                   hidden_dim=self.hidden_dim,
+                                                    output_dim=self.hidden_dim,
+                                                   num_layers=1,
+                                                   )
+        elif model == 'GCN-2':  # graph neural networks
+            self.base_model = GNNSequenceProcessor(input_dim=self.hidden_dim,
+                                                   hidden_dim=self.hidden_dim,
+                                                    output_dim=self.hidden_dim,
+                                                   num_layers=2,)
         else:
             raise RuntimeError(f'Unknown model: {model}')
 
@@ -333,15 +379,16 @@ class MyFeatureAttnBlock(nn.Module):
 
 
 class MyTemporalAttnBlock(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, hidden_dim):
         super().__init__()
+        self.hidden_dim = hidden_dim
 
         self.enable_residual_gamma = config.enable_residual_gamma
         if self.enable_residual_gamma:
             self.gamma = nn.Parameter(torch.zeros(1))
 
         # temporal wise attn
-        self.attn = nn.MultiheadAttention(config.embed_dim,
+        self.attn = nn.MultiheadAttention(self.hidden_dim,
                                           num_heads=config.encoder_num_heads,
                                           dropout=config.dropout if config.enable_dropout else 0,
                                           batch_first=True)
@@ -470,15 +517,15 @@ class MyEncoder(nn.Module):
         elif config.model == 'STEN_GP_FFD_TA':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
-                layers.append(MyTemporalAttnBlock(config))
+                layers.append(MyTemporalAttnBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_TA_FFD':
             for _ in range(config.encoder_layer_size):
-                layers.append(MyTemporalAttnBlock(config))
+                layers.append(MyTemporalAttnBlock(config, self.hidden_dim))
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FA_TA':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeatureAttnBlock(config))
-                layers.append(MyTemporalAttnBlock(config))
+                layers.append(MyTemporalAttnBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FFD':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
@@ -494,6 +541,10 @@ class MyEncoder(nn.Module):
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='SA'))
         elif config.model == 'STEN_GP_Simple_MHSA':
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-4'))
+        elif config.model == 'STEN_GP_Simple_GCN_1':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='GCN-1'))
+        elif config.model == 'STEN_GP_Simple_GCN_2':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='GCN-2'))
         else:
             raise RuntimeError(f'Unknown model: {config.model}')
 
@@ -815,6 +866,8 @@ if __name__ == '__main__':
         'STEN_GP_Simple_MLP',
         'STEN_GP_Simple_RNN', 'STEN_GP_Simple_LSTM', 'STEN_GP_Simple_BLSTM',
         'STEN_GP_Simple_SA', 'STEN_GP_Simple_MHSA',
+        'STEN_GP_Simple_GCN_1',
+        'STEN_GP_Simple_GCN_2',
         'STEN_GP_BLSTM_FFD',
     ]
     # model_names = ['STEN_GP_BLSTM_FFD']
