@@ -314,11 +314,11 @@ if __name__ == '__main__':
 
     dataset_dir = './dataset/p2_ded_bead_profile/20241225'
 
-    model_dir = './output/p2_ded_bead_profile/v13.1'
-    model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
+    # model_dir = './output/p2_ded_bead_profile/v13.1'
+    # model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
 
-    # model_dir = './output/p2_ded_bead_profile/ubun.v16.2'
-    # model_name = f"241128-013057.2494.wha.img_param_pos_111.standardize.sample_1.enc_201_ah_100.label_6.b64.lstm_ffd.lr_0.4e-5_0.985.mse-mapa"
+    model_dir = './output/p2_ded_bead_profile/v18.0'
+    model_name = f"241226-165116.3609.trans_A_to_AA.standardize.sample_1.enc_201_ah_100.label_6.b64.lstm_ffd.lr_0.4e-5_0.985.loss_008812.ep200"
 
 
     if TEST_MODE == 'deploy_for_all_dataset':  # deploy mode on

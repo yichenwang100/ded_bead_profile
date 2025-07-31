@@ -213,6 +213,7 @@ class MyInputEmbedding(nn.Module):
 from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data
 
+
 class GNNSequenceProcessor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2, batch_first=True):
         super().__init__()
@@ -247,6 +248,7 @@ class GNNSequenceProcessor(nn.Module):
         out = data.x
         for gcn in self.gcns:
             out = gcn(out, data.edge_index)  # Apply GCN layer
+            out = F.relu(out)
 
         # Return the output node features (now of shape [batch_size * seq_len, hidden_dim])
         return data.x.view(batch_size, seq_len, -1)  # Reshape back to [batch_size, seq_len, hidden_dim]
@@ -263,76 +265,157 @@ class MySimpleModelBlock(nn.Module):
         self.enable_rnn = False
         self.enable_attention = False
 
-        if model == 'MLP':  # Multi-layer perception
-            self.fc1 = nn.Linear(self.hidden_dim, self.hidden_dim)
-            self.relu = nn.ReLU()
-            self.fc2 = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.enable_residual = False
+        self.enable_norm = False
+        self.enable_activation = True
 
-            self.base_model = nn.Sequential(self.fc1, self.relu, self.fc2)
+        if model == 'MLP':  # Multi-layer perception
+            self.base_model = nn.Sequential(
+                nn.Linear(self.hidden_dim, self.hidden_dim),
+                nn.ReLU(),
+                nn.Linear(self.hidden_dim, self.hidden_dim))
 
         elif model == 'RNN':
             self.base_model = nn.RNN(input_size=self.hidden_dim,
-                                     hidden_size=self.hidden_dim,
-                                     num_layers=1,
-                                     batch_first=True,
-                                     bidirectional=False,
-                                     )
+                       hidden_size=self.hidden_dim,
+                       num_layers=1,
+                       batch_first=True,
+                       bidirectional=False,
+                       )
             self.enable_rnn = True
 
         elif model == 'LSTM':
             self.base_model = nn.LSTM(input_size=self.hidden_dim,
-                                      hidden_size=self.hidden_dim,
-                                      num_layers=1,
-                                      batch_first=True,
-                                      bidirectional=False,
-                                      )
+                        hidden_size=self.hidden_dim,
+                        num_layers=1,
+                        batch_first=True,
+                        bidirectional=False,
+                        )
+            self.enable_rnn = True
+
+        elif model == 'LSTM_2':
+            self.base_model =nn.LSTM(input_size=self.hidden_dim,
+                        hidden_size=self.hidden_dim,
+                        num_layers=2,
+                        batch_first=True,
+                        bidirectional=False,
+                        )
+            self.enable_rnn = True
+
+        elif model == 'LSTM_3':
+            self.base_model =nn.LSTM(input_size=self.hidden_dim,
+                        hidden_size=self.hidden_dim,
+                        num_layers=3,
+                        batch_first=True,
+                        bidirectional=False,
+                        )
             self.enable_rnn = True
 
         elif model == 'BLSTM':
+            self.base_model =nn.LSTM(input_size=self.hidden_dim,
+                        hidden_size=self.hidden_dim // 2,
+                        num_layers=1,
+                        batch_first=True,
+                        bidirectional=True,
+                        )
+            self.enable_rnn = True
+
+        elif model == 'BLSTM_2':
             self.base_model = nn.LSTM(input_size=self.hidden_dim,
-                                      hidden_size=self.hidden_dim // 2,
-                                      num_layers=1,
-                                      batch_first=True,
-                                      bidirectional=True,
-                                      )
+                        hidden_size=self.hidden_dim // 2,
+                        num_layers=2,
+                        batch_first=True,
+                        bidirectional=True,
+                        )
             self.enable_rnn = True
 
         elif model == 'SA':  # self-attention
             self.base_model = nn.MultiheadAttention(config.embed_dim,
-                                                    num_heads=1,
-                                                    dropout=config.dropout if config.enable_dropout else 0,
-                                                    batch_first=True)
+                                      num_heads=1,
+                                      # dropout=config.dropout if config.enable_dropout else 0,
+                                      batch_first=True)
             self.enable_attention = True
 
         elif model == 'MHSA-4':  # multi-head self-attention
-            self.base_model = nn.MultiheadAttention(self.hidden_dim,
+            self.base_model = nn.MultiheadAttention(config.embed_dim,
+                                      num_heads=4,
+                                      # dropout=config.dropout if config.enable_dropout else 0,
+                                      batch_first=True)
+            self.enable_attention = True
+
+        elif model == 'MHSA-4-Res':  # multi-head self-attention
+            self.base_model = nn.MultiheadAttention(config.embed_dim,
                                                     num_heads=4,
                                                     dropout=config.dropout if config.enable_dropout else 0,
                                                     batch_first=True)
+            self.enable_attention = True
+            self.enable_residual = True
+
+        elif model == 'MHSA-4-Res-Norm':  # multi-head self-attention
+            self.base_model = nn.MultiheadAttention(config.embed_dim,
+                                                    num_heads=4,
+                                                    dropout=config.dropout if config.enable_dropout else 0,
+                                                    batch_first=True)
+            self.ln = nn.LayerNorm(config.embed_dim)
+            self.enable_attention = True
+            self.enable_residual = True
+            self.enable_norm = True
+
+        elif model == 'MHSA-8':  # multi-head self-attention
+            self.base_model = nn.MultiheadAttention(config.embed_dim,
+                                      num_heads=8,
+                                      dropout=config.dropout if config.enable_dropout else 0,
+                                      batch_first=True)
             self.enable_attention = True
 
         elif model == 'GCN-1':  # graph neural networks
             self.base_model = GNNSequenceProcessor(input_dim=self.hidden_dim,
                                                    hidden_dim=self.hidden_dim,
-                                                    output_dim=self.hidden_dim,
+                                                   output_dim=self.hidden_dim,
                                                    num_layers=1,
                                                    )
+            self.enable_activation = False
+
         elif model == 'GCN-2':  # graph neural networks
             self.base_model = GNNSequenceProcessor(input_dim=self.hidden_dim,
                                                    hidden_dim=self.hidden_dim,
-                                                    output_dim=self.hidden_dim,
-                                                   num_layers=2,)
+                                                   output_dim=self.hidden_dim,
+                                                   num_layers=2, )
+            self.enable_activation = False
+
+        elif model == 'GCN-3':  # graph neural networks
+            self.base_model = GNNSequenceProcessor(input_dim=self.hidden_dim,
+                                                   hidden_dim=self.hidden_dim,
+                                                   output_dim=self.hidden_dim,
+                                                   num_layers=3, )
+            self.enable_activation = False
+
         else:
             raise RuntimeError(f'Unknown model: {model}')
 
     def forward(self, x):
+        if self.enable_residual:
+            x_res = x
+
         if self.enable_rnn:
             x, _ = self.base_model(x, hx=None)
-            return x
         elif self.enable_attention:
-            return self.base_model(x, x, x, need_weights=False)[0]
+            x = self.base_model(x, x, x, need_weights=False)[0]
         else:
-            return self.base_model(x)
+            x = self.base_model(x)
+
+        if self.enable_residual:
+            x = x_res + x
+
+        if self.enable_norm:
+            x = self.ln(x)
+
+        if self.enable_activation:
+            x = F.relu(x)
+
+        return x
+
+
 
 
 class MyFeatureAttnBlock(nn.Module):
@@ -514,6 +597,10 @@ class MyEncoder(nn.Module):
             for _ in range(config.encoder_layer_size):
                 layers.append(MyRnnBlock(config, self.hidden_dim, model='LSTM', bidirectional=True))
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
+        elif config.model == 'STEN_GP_GCN_2_FFD':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MySimpleModelBlock(config, self.hidden_dim, model='GCN-2'))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FFD_TA':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
@@ -526,6 +613,18 @@ class MyEncoder(nn.Module):
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeatureAttnBlock(config))
                 layers.append(MyTemporalAttnBlock(config, self.hidden_dim))
+        elif config.model == 'STEN_GP_MHSA_4_Res_FFD':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-4-Res'))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
+        elif config.model == 'STEN_GP_MHSA_4_Res_Norm_FFD':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-4-Res-Norm'))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
+        elif config.model == 'STEN_GP_LSTM_2_FFD':
+            for _ in range(config.encoder_layer_size):
+                layers.append(MySimpleModelBlock(config, self.hidden_dim, model='LSTM_2'))
+                layers.append(MyFeedForwardBlock(config, self.hidden_dim))
         elif config.model == 'STEN_GP_FFD':
             for _ in range(config.encoder_layer_size):
                 layers.append(MyFeedForwardBlock(config, self.hidden_dim))
@@ -535,16 +634,34 @@ class MyEncoder(nn.Module):
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='RNN'))
         elif config.model == 'STEN_GP_Simple_LSTM':
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='LSTM'))
+        elif config.model == 'STEN_GP_Simple_LSTM_2':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='LSTM_2'))
+        elif config.model == 'STEN_GP_Simple_LSTM_2_Simple_MLP':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='LSTM_2'))
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MLP'))
+        elif config.model == 'STEN_GP_Simple_LSTM_3':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='LSTM_3'))
         elif config.model == 'STEN_GP_Simple_BLSTM':
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='BLSTM'))
+        elif config.model == 'STEN_GP_Simple_BLSTM_2':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='BLSTM_2'))
+        elif config.model == 'STEN_GP_Simple_BLSTM_3':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='BLSTM_3'))
         elif config.model == 'STEN_GP_Simple_SA':
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='SA'))
         elif config.model == 'STEN_GP_Simple_MHSA':
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-4'))
+        elif config.model == 'STEN_GP_2_Simple_MHSA':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-4'))
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-4'))
+        elif config.model == 'STEN_GP_Simple_MHSA_8':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='MHSA-8'))
         elif config.model == 'STEN_GP_Simple_GCN_1':
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='GCN-1'))
         elif config.model == 'STEN_GP_Simple_GCN_2':
             layers.append(MySimpleModelBlock(config, self.hidden_dim, model='GCN-2'))
+        elif config.model == 'STEN_GP_Simple_GCN_3':
+            layers.append(MySimpleModelBlock(config, self.hidden_dim, model='GCN-3'))
         else:
             raise RuntimeError(f'Unknown model: {config.model}')
 
@@ -854,7 +971,7 @@ def get_model(config):
 
 if __name__ == '__main__':
     ENABLE_PROFILING = False
-    ENABLE_LAYER_TIMING = False
+    ENABLE_LAYER_TIMING = True
     ENABLE_MODEL_SUMMARY = True
 
     config = load_config()
@@ -864,13 +981,31 @@ if __name__ == '__main__':
 
     model_names = [
         'STEN_GP_Simple_MLP',
-        'STEN_GP_Simple_RNN', 'STEN_GP_Simple_LSTM', 'STEN_GP_Simple_BLSTM',
-        'STEN_GP_Simple_SA', 'STEN_GP_Simple_MHSA',
+        'STEN_GP_Simple_RNN',
+        'STEN_GP_Simple_LSTM',
+        'STEN_GP_Simple_LSTM_2',
+        'STEN_GP_Simple_LSTM_2_Simple_MLP',
+        'STEN_GP_Simple_LSTM_3',
+        'STEN_GP_Simple_BLSTM',
+        'STEN_GP_Simple_BLSTM_2',
+        'STEN_GP_Simple_SA',
+        'STEN_GP_Simple_MHSA',
+        'STEN_GP_Simple_MHSA_8',
+        'STEN_GP_2_Simple_MHSA',
         'STEN_GP_Simple_GCN_1',
         'STEN_GP_Simple_GCN_2',
+        'STEN_GP_Simple_GCN_3',
+        'STEN_GP_GCN_2_FFD',
+        'STEN_GP_MHSA_4_Res_FFD',
+        'STEN_GP_MHSA_4_Res_Norm_FFD',
+        'STEN_GP_LSTM_2_FFD',
         'STEN_GP_BLSTM_FFD',
     ]
-    # model_names = ['STEN_GP_BLSTM_FFD']
+    # model_names = [
+    #     'STEN_GP_Simple_LSTM_2',
+    #     'STEN_GP_Simple_BLSTM_2',
+    # ]
+    # model_names = ['STEN_GP_Simple_MHSA_8']
     total_params_list_list = []
     timing_history_list = []
     # INPUT_LEN_LIST = [25*k for k in range(1, 31)]
@@ -975,6 +1110,9 @@ if __name__ == '__main__':
                     print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
 
             total_params_list_list.append(total_params_list)
+
+    print('> models:')
+    print(model_names)
 
     print('> total param')
     print(total_params_list_list)

@@ -507,7 +507,7 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
         transforms.Normalize(mean=[grey_scale_mean], std=[grey_scale_std]),
     ])
 
-    # Load the pre-trained ResNet-50 model with the updated argument
+    # Load the pre-trained ResNet model with the updated argument
     import torchvision.models as models
     weights = models.ResNet18_Weights.DEFAULT
     cnn_model = models.resnet18(weights=weights)
@@ -551,7 +551,7 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
                   f' | remaining: {t_elapsed / (index + 1) * (len(df) - index):.3f}s'
                   f' | speed: {t_elapsed/(index+1)*1000}ms/frame')
         img_filename = row['IMG']
-        img_path = os.path.join(img_root_dir, img_filename)
+        img_path = os.path.join(img_root_dir, img_filename).replace('\\', '/')
 
         # Load and preprocess image
         image = Image.open(img_path)
@@ -617,9 +617,12 @@ def create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_
 if __name__ == '__main__':
     # test_dataset()
     #
-    img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
+    # img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
+    img_root_dir = r'/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile'
     # data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20241225'
-    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
-    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20241225_test'
-    create_dataset(os.path.join(data_root_dir, 'High_const_sin_2.csv'), img_root_dir, output_dir)
+    # data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
+    data_root_dir = r'/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile/Post_Data_20240919'
+    # output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20241225_test'
+    output_dir = r'/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile/20240919_test'
+    create_dataset(os.path.join(data_root_dir, 'High_const_sin_1.csv'), img_root_dir, output_dir)
     # create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)

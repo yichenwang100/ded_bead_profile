@@ -445,20 +445,27 @@ if __name__ == '__main__':
 
         elif config.training_mode == 'benchmark_test':
             # model_names = [
-            #     'STEN_GP_Simple_LSTM', 'STEN_GP_Simple_BLSTM',
-            # ]
-            # model_names = [
             #     'STEN_GP_Simple_MLP',
             #     'STEN_GP_Simple_RNN',
-            # ]
-            # model_names = [
-            #     'STEN_GP_Simple_SA', 'STEN_GP_Simple_MHSA',
-            # ]
-            # model_names = [
+            #     'STEN_GP_Simple_LSTM',
+            #     'STEN_GP_Simple_LSTM_2',
+            #     'STEN_GP_Simple_BLSTM',
+            #     'STEN_GP_Simple_BLSTM_2',
+            #       'STEN_GP_Simple_LSTM_3',
+            #     'STEN_GP_Simple_SA',
+            #     'STEN_GP_Simple_MHSA',
             #     'STEN_GP_Simple_GCN_1',
             #     'STEN_GP_Simple_GCN_2',
+            #     'STEN_GP_Simple_GCN_3',
+            #     'STEN_GP_GCN_2_FFD',
+            #     'STEN_GP_BLSTM_FFD',
             # ]
-            model_names = ['STEN_GP_Simple_MHSA']
+
+            model_names = [
+                # 'STEN_GP_Simple_MHSA',
+                'STEN_GP_Simple_MHSA_8',
+            ]
+
 
             for i_test, model_name in enumerate(model_names):
                 print('*'*50, '\n')
@@ -466,7 +473,7 @@ if __name__ == '__main__':
                       f', model_name: {model_name}')
                 config_train = copy.deepcopy(config)
 
-                config_train.extra_name = f'enc_{model_name}'
+                config_train.extra_name = f'enc_{model_name}_grad'
                 config_train.model = model_name
 
                 train(config_train)
