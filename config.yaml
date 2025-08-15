@@ -7,9 +7,9 @@ machine_config_path: 'machine.yaml'
 enable_seed: True  # apply seed globally
 seed: 42
 enable_rewrite_output_dir: True
-output_dir: './output/p2_ded_bead_profile/v21.0'  # relative to data_root_dir
+output_dir: './output/p2_ded_bead_profile/v21.1'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'benchmark.standardize.sample_1.enc_201_ah_100.label_6.b64.lr_0.4e-5_0.985.loss_008812'
+extra_name: 'benchmark.additional_noise.standardize.sample_1.enc_201_ah_100.label_6.b64.lr_0.4e-5_0.985.loss_008812'
 #extra_name: 'enc_301_ah_200'
 training_mode: 'benchmark_test' # training model: 'default', 'epoch_time_test', 'seq_len_test', 'benchmark_test'
 
@@ -59,6 +59,7 @@ label_start_index: 13 # 0 for WHA, 7 for Sigmoid param, the rest for cropped dat
 label_crop_size: 400  # 6 for wha, 400 for dataset 0823/later
 label_size: 40  # 6 for wha, 40 for dataset 0823/later
 label_noise_cutoff: 0.01
+label_additional_noise: 0.05 # 0.05 means 5% more
 
 # Model
 model: "STEN_GP_BLSTM_FFD"  # None, STEN_GP_FA_TA, STEN_GP_FFD, STEN_GP_TA_FFD, STEN_GP_FFD_TA, STEN_GP_FFD_BLSTM
@@ -69,7 +70,7 @@ preload_param_path: '/home/ubuntu/Desktop/mydata/output/p2_ded_bead_profile/v13.
 ## embedding
 feature_embed_option: 'default' # 'fc', 'default'
 embed_preload_param: False
-embed_require_grad: False  # --- ABLATION + Transfer learning
+embed_require_grad: True  # --- ABLATION + Transfer learning
 embed_dim: -1 # auto calculated
 ## embedding / Img
 enable_img_embed: True   # --- ABLATION
@@ -83,7 +84,7 @@ pos_embed_exclude: None
 pos_embed_dim: 6
 ## encoder
 encoder_preload_param: False
-encoder_require_grad: False  # --- ABLATION + Transfer learning
+encoder_require_grad: True  # --- ABLATION + Transfer learning
 encoder_layer_size: 1   # --- ABLATION
 encoder_num_heads: 4
 enable_residual_gamma: False   # --- ABLATION

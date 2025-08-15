@@ -89,6 +89,10 @@ def train(config):
                                reset_dec_hx=True)
 
                 y_true = y[:, i_dec + n_seq_enc_look_back, :]
+                if 'label_additional_noise' in config and config.label_additional_noise != 0:
+                    noise_level = config.label_additional_noise
+                    noise = torch.randn_like(y_true) * (noise_level * y_true.abs())  # scale by each element's magnitude
+                    y_true = y_true + noise
 
                 # scheduled sampling: use mixed labels of true and pred
                 if enable_auto_regression:
@@ -451,9 +455,10 @@ if __name__ == '__main__':
             #     'STEN_GP_Simple_LSTM_2',
             #     'STEN_GP_Simple_BLSTM',
             #     'STEN_GP_Simple_BLSTM_2',
-            #       'STEN_GP_Simple_LSTM_3',
+            #      'STEN_GP_Simple_LSTM_3',
             #     'STEN_GP_Simple_SA',
             #     'STEN_GP_Simple_MHSA',
+            #     'STEN_GP_Simple_MHSA_8',
             #     'STEN_GP_Simple_GCN_1',
             #     'STEN_GP_Simple_GCN_2',
             #     'STEN_GP_Simple_GCN_3',
@@ -462,10 +467,8 @@ if __name__ == '__main__':
             # ]
 
             model_names = [
-                # 'STEN_GP_Simple_MHSA',
-                'STEN_GP_Simple_MHSA_8',
+                'STEN_GP_BLSTM_FFD'
             ]
-
 
             for i_test, model_name in enumerate(model_names):
                 print('*'*50, '\n')
