@@ -346,7 +346,7 @@ class MySimpleModelBlock(nn.Module):
         elif model == 'MHSA-4-Res':  # multi-head self-attention
             self.base_model = nn.MultiheadAttention(config.embed_dim,
                                                     num_heads=4,
-                                                    dropout=config.dropout if config.enable_dropout else 0,
+                                                    # dropout=config.dropout if config.enable_dropout else 0,
                                                     batch_first=True)
             self.enable_attention = True
             self.enable_residual = True
@@ -354,7 +354,7 @@ class MySimpleModelBlock(nn.Module):
         elif model == 'MHSA-4-Res-Norm':  # multi-head self-attention
             self.base_model = nn.MultiheadAttention(config.embed_dim,
                                                     num_heads=4,
-                                                    dropout=config.dropout if config.enable_dropout else 0,
+                                                    # dropout=config.dropout if config.enable_dropout else 0,
                                                     batch_first=True)
             self.ln = nn.LayerNorm(config.embed_dim)
             self.enable_attention = True
@@ -364,7 +364,7 @@ class MySimpleModelBlock(nn.Module):
         elif model == 'MHSA-8':  # multi-head self-attention
             self.base_model = nn.MultiheadAttention(config.embed_dim,
                                       num_heads=8,
-                                      dropout=config.dropout if config.enable_dropout else 0,
+                                      # dropout=config.dropout if config.enable_dropout else 0,
                                       batch_first=True)
             self.enable_attention = True
 
