@@ -73,9 +73,3 @@ To apply filters on tensorboard using regex
 ```
 
 
-## Test
-Check the result of trained model.
-```shell
-python test.py
-```
-
