@@ -62,7 +62,7 @@ python delay_run.py
 
 To view training results on tensorboard (adjust path accordingly):
 ```shell
-tensorboard --logdir=C:\mydata\output\p2_ded_bead_profile\v13.1
+tensorboard --logdir=C:\mydata\output\p2_ded_bead_profile\v19.9
 ```
 
 To apply filters on tensorboard using regex

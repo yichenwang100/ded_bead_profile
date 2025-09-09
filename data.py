@@ -11,6 +11,9 @@ from torch.utils.data.distributed import DistributedSampler
 
 import pandas as pd
 from PIL import Image
+from scipy.ndimage import center_of_mass
+from skimage.measure import shannon_entropy
+
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
@@ -89,7 +92,17 @@ map_param_str_to_show_name = {
     'HEIGHT': 'Height \n(mm)',
     'AREA': 'Area \n(mm^2)',
 
+    'W1': 'Width \n(mm)',
+    'H': 'Height \n(mm)',
+    'A': 'Area \n(mm^2)',
+
     'IoU': 'IoU',
+
+    'img_area': 'Image Area',
+    'img_center_x': 'Image CoM X',
+    'img_center_y': 'Image CoM Y',
+    'img_entropy': 'Image Entropy',
+    'img_mean_value': 'Image Mean',
 }
 
 def param_id_to_str(id):
@@ -507,7 +520,7 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
         transforms.Normalize(mean=[grey_scale_mean], std=[grey_scale_std]),
     ])
 
-    # Load the pre-trained ResNet model with the updated argument
+    # Load the pre-trained ResNet-50 model with the updated argument
     import torchvision.models as models
     weights = models.ResNet18_Weights.DEFAULT
     cnn_model = models.resnet18(weights=weights)
@@ -551,7 +564,7 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
                   f' | remaining: {t_elapsed / (index + 1) * (len(df) - index):.3f}s'
                   f' | speed: {t_elapsed/(index+1)*1000}ms/frame')
         img_filename = row['IMG']
-        img_path = os.path.join(img_root_dir, img_filename).replace('\\', '/')
+        img_path = os.path.join(img_root_dir, img_filename)
 
         # Load and preprocess image
         image = Image.open(img_path)
@@ -582,8 +595,25 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
         else:
             profile_mask = torch.tensor([1])
 
+        # === Image Statistics ===
+        def extract_map_stats(img_np: np.ndarray, threshold=0.01):
+            """Extract statistics from a grayscale image or Grad-CAM heatmap."""
+            img_norm = (img_np - img_np.min()) / (img_np.max() - img_np.min() + 1e-8)
+            bin_mask = img_norm > threshold
+            area = np.sum(bin_mask) / img_norm.size
+            entropy = shannon_entropy(img_norm)
+            cy, cx = center_of_mass(img_norm)
+            mean_val = np.mean(img_norm)
+            std_val = np.std(img_norm)
+            max_val = np.max(img_norm)
+            min_val = np.min(img_norm)
+            return [area, cx, cy, entropy, mean_val, std_val, max_val, min_val]
+
+        img_np = image.squeeze().cpu().numpy()
+        img_stats = torch.tensor(extract_map_stats(img_np), dtype=torch.float32)
+
         # Concatenate all data
-        row_tensor = torch.cat((cnn_features, control_params, position_data, label_data, profile_mask))
+        row_tensor = torch.cat((cnn_features, control_params, position_data, label_data, profile_mask, img_stats))
         tensors.append(row_tensor)
 
     # Stack all row tensors to create the final dataset tensor
@@ -617,12 +647,9 @@ def create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_
 if __name__ == '__main__':
     # test_dataset()
     #
-    # img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
-    img_root_dir = r'/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile'
+    img_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile'
     # data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20241225'
-    # data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
-    data_root_dir = r'/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile/Post_Data_20240919'
-    # output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20241225_test'
-    output_dir = r'/home/ubuntu/Desktop/mydata/dataset/p2_ded_bead_profile/20240919_test'
-    create_dataset(os.path.join(data_root_dir, 'High_const_sin_1.csv'), img_root_dir, output_dir)
+    data_root_dir = r'C:\mydata\dataset\p2_ded_bead_profile\Post_Data_20240919'
+    output_dir = r'C:\mydata\dataset\p2_ded_bead_profile\20250810'
+    create_dataset(os.path.join(data_root_dir, 'High_sin_tooth_1.csv'), img_root_dir, output_dir)
     # create_all_dataset_in_parallel(data_root_dir, img_root_dir, output_dir, num_worker=8)

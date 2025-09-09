@@ -90,6 +90,11 @@ def train(config):
 
                 y_true = y[:, i_dec + n_seq_enc_look_back, :]
 
+                if 'label_additional_noise' in config and config.label_additional_noise != 0:
+                    noise_level = config.label_additional_noise
+                    noise = torch.randn_like(y_true) * (noise_level * y_true.abs())  # scale by each element's magnitude
+                    y_true = y_true + noise
+
                 # scheduled sampling: use mixed labels of true and pred
                 if enable_auto_regression:
                     def is_using_true_label(i_epoch):
@@ -462,8 +467,7 @@ if __name__ == '__main__':
             # ]
 
             model_names = [
-                # 'STEN_GP_Simple_MHSA',
-                'STEN_GP_Simple_MHSA_8',
+                'STEN_GP_BLSTM_FFD',
             ]
 
 

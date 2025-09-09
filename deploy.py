@@ -8,7 +8,7 @@ from data import *
 
 # setup modes
 ENABLE_SAVE_SALIENCY = False
-ENABLE_SAVE_DETAILED_OUTPUT = False
+ENABLE_SAVE_DETAILED_OUTPUT = True
 TEST_BATCH_SIZE = 64
 
 
@@ -266,7 +266,12 @@ def deploy_trained_model(output_dir,
         print(f'\n> best_model_wts_file: {best_model_wts_file}')
         shutil.copy(src=os.path.join(machine_model_dir, best_model_wts_file), dst=config.machine_output_dir)
 
-        model.load_state_dict(torch.load(os.path.join(config.machine_output_dir, best_model_wts_file)))
+        model.load_state_dict(
+            torch.load(
+                os.path.join(config.machine_output_dir, best_model_wts_file),
+                map_location=config.device
+            )
+        )
 
         # Move the model to the appropriate device
         model = model.to(config.device)
@@ -302,30 +307,39 @@ def deploy_trained_model(output_dir,
 
 
 if __name__ == '__main__':
-    TEST_MODE = 'deploy_for_all_dataset'
-    extra_name = 'all_datasets'
-
+    ''' TEST_MODE '''
+    # TEST_MODE = 'deploy_for_all_dataset'
     # TEST_MODE = 'deploy_multi_models_wts_on_one_dataset'
-    # extra_name = 'deploy_multi_model_wts_2'
-
     # TEST_MODE = 'test-Saliency'
+    TEST_MODE = 'deploy_one_model_wts_on_one_dataset'
 
-    output_dir = './output/p2_ded_bead_profile/v20.4.d'
+    ''' EXTRA NAME for comments '''
+    # extra_name = 'all_datasets'
+    # extra_name = 'deploy_multi_model_wts_2'
+    extra_name = 'rtcp_on'
 
-    dataset_dir = './dataset/p2_ded_bead_profile/20241225'
+    ''' choose DATASET '''
+    dataset_dir = './dataset/p2_ded_bead_profile/20250730'
 
-    # model_dir = './output/p2_ded_bead_profile/v13.1'
-    # model_name = f"241031-193730.9630.param_5.standardize.sample_1.enc_201_ah_100.label_40.b64.blstm_ffd.lr_0.4e-5_0.985.loss_008812"
+    # target_dataset = 'Low_noise_tooth_2_dataset.pt'
+    target_dataset = 'High_sin_tooth_1_dataset.pt'
+    # target_dataset = 'High_sin_tooth_2_dataset.pt'
 
-    model_dir = './output/p2_ded_bead_profile/v18.0'
-    model_name = f"241226-165116.3609.trans_A_to_AA.standardize.sample_1.enc_201_ah_100.label_6.b64.lstm_ffd.lr_0.4e-5_0.985.loss_008812.ep200"
 
+    ''' define output DIR '''
+    output_dir = './output/p2_ded_bead_profile/ubun.v21.1'
+
+    ''' define model location '''
+    # model_dir = './output/p2_ded_bead_profile/v18.0'
+    # model_name = f"241226-165116.3609.trans_A_to_AA.standardize.sample_1.enc_201_ah_100.label_6.b64.lstm_ffd.lr_0.4e-5_0.985.loss_008812.ep200"
+
+    model_dir = './output/p2_ded_bead_profile/ubun.v21.1'
+    model_name = '250207-141508.2623.enc_STEN_GP_BLSTM_FFD_grad'
 
     if TEST_MODE == 'deploy_for_all_dataset':  # deploy mode on
         deploy_trained_model(output_dir=output_dir,
                              extra_name=extra_name,
                              dataset_dir=dataset_dir,
-
                              model_dir=model_dir,
                              model_name=model_name,
                              use_all_wts_files=False,
@@ -342,7 +356,20 @@ if __name__ == '__main__':
                              use_all_wts_files=True,
                              use_all_dataset=False,
                              dataset_file_ratio=[0, 1],
-                             target_dataset='Low_noise_tooth_2_dataset.pt',
+                             target_dataset=target_dataset,
                              self_reg=False)
+
+    elif TEST_MODE == 'deploy_one_model_wts_on_one_dataset':
+        deploy_trained_model(output_dir=output_dir,
+                             extra_name=extra_name,
+                             dataset_dir=dataset_dir,
+                             model_dir=model_dir,
+                             model_name=model_name,
+                             use_all_wts_files=False,
+                             use_all_dataset=False,
+                             dataset_file_ratio=[0, 1],
+                             target_dataset=target_dataset,
+                             self_reg=False)
+
     else:
-        pass
+        raise RuntimeError(f'TEST_MODE {TEST_MODE} not implemented')
