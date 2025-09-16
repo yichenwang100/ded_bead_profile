@@ -39,7 +39,8 @@ output/
 
 ## Data
 Public dataset: https://zenodo.org/records/17087718
-Note that pre-processed data is used to increase time efficiency in training.
+
+Note that this pre-processed data (with ext of .pt) is used to increase time efficiency in training.
 
 Please contact authors for full dataset with raw images (data size ~55 GB).
 
