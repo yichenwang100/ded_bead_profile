@@ -38,8 +38,10 @@ output/
 ```
 
 ## Data
-Please contact authors for dataset.
+Public dataset: https://zenodo.org/records/17087718
 Note that pre-processed data is used to increase time efficiency in training.
+
+Please contact authors for full dataset with raw images (data size ~55 GB).
 
 ## Train
 The following shell formatting are supported.
@@ -71,5 +73,9 @@ To apply filters on tensorboard using regex
 ^(?=.*ABC)(?=.*5.0E-04)(?=.*mse_w_val).*
 ^(?=.*ABC)(?=.*101)(?=.*loss_val).*
 ```
+
+## Publication
+[DED bead geometry and profile prediction with multimodal spatio-temporal neural networks](https://www.sciencedirect.com/science/article/abs/pii/S2214860425003161?fr=RR-2&ref=pdf_download&rr=978bbd1cbc0a93f6)
+doi: https://doi.org/10.1016/j.addma.2025.104952
 
 
