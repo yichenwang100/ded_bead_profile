@@ -1,15 +1,27 @@
 ## Overview
 
-This is a deep-learning-based project for geometry prediction in DED 3D-printing. 
+This project develops a deep learning framework for geometry prediction in Directed Energy Deposition (DED) 3D printing.
 
-- Input: co-axial images, processs parameters like laser power and travel speed, and positional variables like aboslute positions, velocities, etc. 
-- Output: cross sectional profiles of the beads, or the width, height, and area of the beads. 
+**Inputs**:
+- Co-axial melt pool images
+- Process parameters (e.g., laser power, travel speed)
+- Positional variables (e.g., absolute positions, velocities)
 
-See more details in our publication: 
-[DED bead geometry and profile prediction with multimodal spatio-temporal neural networks](https://doi.org/10.1016/j.addma.2025.104952)
+**Outputs**:
+- Cross-sectional bead profiles
+- Bead geometry descriptors (width, height, area)
+
+For further details, see our publication: [DED bead geometry and profile prediction with multimodal spatio-temporal neural networks](https://doi.org/10.1016/j.addma.2025.104952)
+
+**Keywords**: Additive manufacturing, Directed energy deposition, Bead geometry prediction, Multimodal data fusion, Spatio-temporal neural network, Machine learning
 
 ## Requirement
 The python version is `Python 3.11`
+
+The pytorch version is `2.3.0`
+
+The cuda version is `cu121`
+
 ```shell
 pip install pyyaml bidict numpy pandas torch torchvision tensorboard tqdm 
 ```
@@ -19,14 +31,15 @@ pip install pyyaml bidict numpy pandas torch torchvision tensorboard tqdm
 
 ``` 
 ./
-├── config.yaml # defines hyper parameters, file paths, etc.
-├── util.py     # to setup folders, load configs, etc.
+├── config.yaml # defines hyper parameters, dataset paths, output path, etc.
+├── machine.yaml # defines local machine info, root dir., GPU settings, etc.
+├── util.py     # to setup folders, load configs, and basic math functions, etc.
 ├── data.py     # to generate dataset and dataloader
 ├── model.py    # to define all NN models 
-├── train.py    # to train, valid, and save logs + checkpoints
-├── test.py     # to testify trained models
+├── train.py    # to train, valid, test, and save logs + checkpoints
+├── deploy.py     # to deploy the trained model to testing data
 ├── multi_run.bat   # to run multi training cases at the same time
-├── delay_run.bat   # to run the multi_run.bat with a time delay 
+├── _delay_run.bat   # to run the multi_run.bat with a time delay 
 └── README.md   # requirement and instructions
 
 dataset/
@@ -43,11 +56,17 @@ output/
 ```
 
 ## Data
-Public dataset: https://zenodo.org/records/17087718
+Public dataset (size: ~4GB): https://zenodo.org/records/17087718
+- Note that this dataset (with ext of .pt) is pre-processed data, which is used to increase time efficiency in training.
+- It is recommended to use the pre-processed dataset as it is already spatio-temporally aligned.
+- Please check function `create_dataset` in the file `data.py` for its generation method.
+- Please check class `MyDataset` and class `MyCombinedDataset` in the file `data.py` for its usage.  
 
-Note that this pre-processed data (with ext of .pt) is used to increase time efficiency in training.
+Please contact authors for full dataset (size ~55 GB), which include
+- raw images (~55 GB)
+- point cloud (~9 GB)
+- raw data entries with timestamps (~3 GB).
 
-Please contact authors for full dataset with raw images (data size ~55 GB).
 
 ## Train
 The following shell formatting are supported.
