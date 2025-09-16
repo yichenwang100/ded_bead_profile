@@ -2,7 +2,7 @@
 
 This is a deep-learning-based project for geometry prediction in DED 3D-printing. 
 
-- Input: co-axial images, processs parameter like laser power and travel speed, and positional variable like aboslute positions, velocities, etc. 
+- Input: co-axial images, processs parameters like laser power and travel speed, and positional variables like aboslute positions, velocities, etc. 
 - Output: cross sectional profiles of the beads, or the width, height, and area of the beads. 
 
 See more details in our publication: 
