@@ -2,9 +2,8 @@
 
 This is a deep-learning-based project for geometry prediction in DED 3D-printing. 
 
-The inputs are co-axial images, processs parameter like laser power and travel speed, and positional variable like aboslute positions, velocities, etc. 
-
-The output is the cross sectional profiles of the beads, or the width, height, and area of the beads. 
+- Input: co-axial images, processs parameter like laser power and travel speed, and positional variable like aboslute positions, velocities, etc. 
+- Output: cross sectional profiles of the beads, or the width, height, and area of the beads. 
 
 See more details in our publication: 
 [DED bead geometry and profile prediction with multimodal spatio-temporal neural networks](https://doi.org/10.1016/j.addma.2025.104952)
