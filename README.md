@@ -62,11 +62,20 @@ Public dataset (size: ~4GB): https://zenodo.org/records/17087718
 - Please check function `create_dataset` in the file `data.py` for its generation method.
 - Please check class `MyDataset` and class `MyCombinedDataset` in the file `data.py` for its usage.  
 
-Please contact authors for full dataset (size ~55 GB), which include
+Please contact authors to request the full dataset (size ~55 GB), which include
 - raw images (~55 GB)
 - point cloud (~9 GB)
 - raw data entries with timestamps (~3 GB).
 
+To ensure responsible sharing and compliance with academic standards, please send your request to ywang100@connect.hkust-gz.edu.cn with the following information:
+1. Full name, institutional affiliation, position, and a valid institutional email
+2. Intended research use (project title, objectives, academic/non-commercial)
+3. Background/credibility (Google Scholar, GitHub, or relevant publications)
+4. Data security plan (storage, access control, confidentiality/deletion policy)
+5. Confirmation that the dataset will not be redistributed and will be properly cited
+6. Requested subset, if not the full dataset (~67 GB total: raw images ~55 GB, point cloud ~9 GB, raw entries ~3 GB)
+   
+Once we review your request, we will provide access details along with a Data Use Agreement (DUA/EULA).
 
 ## Train
 The following shell formatting are supported.
