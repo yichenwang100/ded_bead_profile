@@ -31,28 +31,40 @@ pip install pyyaml bidict numpy pandas torch torchvision tensorboard tqdm
 
 ``` 
 ./
-├── config.yaml # defines hyper parameters, dataset paths, output path, etc.
-├── machine.yaml # defines local machine info, root dir., GPU settings, etc.
+├── config.yaml     # defines hyper parameters, dataset paths, output path, etc.
+├── machine.yaml     # defines local machine info, root dir., GPU settings, etc.
 ├── util.py     # to setup folders, load configs, and basic math functions, etc.
 ├── data.py     # to generate dataset and dataloader
-├── model.py    # to define all NN models 
-├── train.py    # to train, valid, test, and save logs + checkpoints
+├── model.py     # to define all NN models 
+├── train.py     # to train, valid, test, and save logs + checkpoints
 ├── deploy.py     # to deploy the trained model to testing data
-├── multi_run.bat   # to run multi training cases at the same time
-├── _delay_run.bat   # to run the multi_run.bat with a time delay 
-└── README.md   # requirement and instructions
+├── multi_run.bat     # to run multi training cases at the same time
+├── _delay_run.bat     # to run the multi_run.bat with a time delay 
+└── README.md     # requirement and instructions
 
 dataset/
-├── raw/
-│   └── (original datasets)
-└── processed/
-    └── (preprocessed datasets)
+├── 20240919     # pytorch data for supervised learning
+├── 20241225     # pytorch data for transfer learning
+├── Post_Data_20240919     # matlab ST-aligned data for supervised learning
+├── Post_Data_20241225     # matlab ST-aligned data for transfer learning
+└── DS_Data     # melt pool image with timestamp
+    └── DS_Data_High     # for supervised learning
+    └── DS_Data_Low     # for supervised learning
+    └── CAD_Data     # for transfer learning
 
 output/
-├── logs
-│   └── (training and evaluation logs)
-└── checkpoints/
-    └── (saved models)
+├── logs     # logs with tensorboard
+    └── train_val_stats.csv    # the train-val-test stats for each epoch
+    └── epoch_loss_test    # loss of the testing process for each epoch
+    └── epoch_loss_train     # loss of the training process for each epoch
+    └── ...
+├── best_model_stats.csv     # the train-val-test stats for each saved weights
+├── best_model_wts.pth     # model weights of the best model
+├── best_model_wts_ep_0.pth     # model weights of the best model up to the 0th epoch
+├── best_model_wts_ep_5.pth     # model weights of the best model up to the 5th epoch
+├── best_model_wts_ep_x.pth     # model weights of the best model up to the xth epoch
+├── best_model_wts_ep_100.pth     # model weights of the best model up to the 100th epoch
+├── config.yaml      # copy of the config file used for training
 ```
 
 ## Data
@@ -62,10 +74,17 @@ Public dataset (size: ~4GB): https://zenodo.org/records/17087718
 - Please check function `create_dataset` in the file `data.py` for its generation method.
 - Please check class `MyDataset` and class `MyCombinedDataset` in the file `data.py` for its usage.  
 
-Please contact authors to request the full dataset (size ~55 GB), which include
-- raw images (~55 GB)
-- point cloud (~9 GB)
-- raw data entries with timestamps (~3 GB).
+Please contact authors to request the full dataset (size 72.4 GB), which include
+|Entry|Size|
+|:-|:-|
+|Melt pool image with timestamp (supervised learning)|52.8 GB|
+|Melt pool image with timestamp (transfer learning)|1.19 GB|
+|Point cloud data (supervised learning)|8.82 GB|
+|Point cloud data (transfer learning)|0.03 GB|
+|MATLAB ST-aligned data (supervised learning)|5.42 GB|
+|MATLAB ST-aligned data (transfer learning)|0.08 GB|
+|Pytorch data (supervised learning)|3.96 GB|
+|Pytroch data (transfer learning)|0.06 GB|
 
 To ensure responsible sharing and compliance with academic standards, please send your request to ywang100@connect.hkust-gz.edu.cn with the following information:
 1. Full name, institutional affiliation, position, and a valid institutional email
@@ -73,7 +92,6 @@ To ensure responsible sharing and compliance with academic standards, please sen
 3. Background/credibility (Google Scholar, GitHub, or relevant publications)
 4. Data security plan (storage, access control, confidentiality/deletion policy)
 5. Confirmation that the dataset will not be redistributed and will be properly cited
-6. Requested subset, if not the full dataset (~67 GB total: raw images ~55 GB, point cloud ~9 GB, raw entries ~3 GB)
    
 Once we review your request, we will provide access details along with a Data Use Agreement (DUA/EULA).
 
