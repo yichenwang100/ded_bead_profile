@@ -613,7 +613,7 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
         img_stats = torch.tensor(extract_map_stats(img_np), dtype=torch.float32)
 
         # Concatenate all data
-        row_tensor = torch.cat((cnn_features, control_params, position_data, label_data, profile_mask, img_stats))
+        row_tensor = torch.cat((cnn_features, control_params, position_data, label_data, img_stats, profile_mask))
         tensors.append(row_tensor)
 
     # Stack all row tensors to create the final dataset tensor
