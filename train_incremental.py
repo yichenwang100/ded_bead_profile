@@ -64,54 +64,29 @@ def _train_one_epoch_on_loader(
 
     model.train()
     for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(loader):
+        # x, y = x.to(config.device), y.to(config.device) # no need as this is done in the dataset init.
+
         # auto-regression:
         if enable_auto_regression:
             y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=y.device)
 
-        loss_temp_sum = 0.0
-        metric_temp_sum = 0.0
+        loss_temp_sum = 0
+        metric_temp_sum = 0
+        for i_dec in range(config.n_seq_dec_pool):
+            # Forward
+            y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
+                           x_param[:, i_dec:i_dec + n_seq_enc_total, :],
+                           x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
+                           y_pool if enable_auto_regression else None,
+                           reset_dec_hx=True)
 
-        # Encoder forward
-        x_enc, y_enc = x_img, y[:, :n_seq_enc_total, :]
-        if config.enable_img:
-            x_enc = x_enc.to(config.device)
-        if config.enable_param:
-            x_param = x_param.to(config.device)
-        if config.enable_pos:
-            x_pos = x_pos.to(config.device)
-        y_enc = y_enc.to(config.device)
-        y = y.to(config.device)
-
-        # Adapt input modalities (same as train.py)
-        x = adaptor(x_enc, x_param, x_pos)
-
-        # (Transformer path) encoder output
-        if config.decoder_option == 'transformer':
-            # For transformer decoder, model expects (x, y_enc) style depending on your implementation
-            # train.py uses model(x, y_pool/y_true) inside decode loop; keep the same pattern below.
-            pass
-
-        # Decoder loop
-        optimizer.zero_grad(set_to_none=True)
-
-        for i_dec in range(config.n_seq_dec_total):
-            if enable_auto_regression:
-                # feed current y_pool
-                y_pred = model(x, y_pool)
-                y_pred = y_pred[:, -1, :]  # last token
-            else:
-                y_pred = model(x)
-                y_pred = y_pred[:, i_dec, :]
-
-            # true label at this decoding step
             y_true = y[:, i_dec + n_seq_enc_look_back, :]
-
             if 'label_additional_noise' in config and config.label_additional_noise != 0:
                 noise_level = config.label_additional_noise
-                noise = torch.randn_like(y_true) * (noise_level * y_true.abs())
+                noise = torch.randn_like(y_true) * (noise_level * y_true.abs())  # scale by each element's magnitude
                 y_true = y_true + noise
 
-            # scheduled sampling
+            # scheduled sampling: use mixed labels of true and pred
             if enable_auto_regression:
                 def is_using_true_label(i_epoch):
                     return (torch.rand(1) < (1 - i_epoch / config.scheduled_sampling_max_epoch)).item()
@@ -119,30 +94,34 @@ def _train_one_epoch_on_loader(
                 if 'enable_scheduled_sampling' in config and config.enable_scheduled_sampling:
                     y_new = y_true if is_using_true_label(epoch) else y_pred
                 else:
-                    y_new = y_true
+                    y_new = y_pred
 
-                y_pool = torch.cat((y_pool, y_new.unsqueeze(1)), dim=1)
+                # Shift elements left and insert the new prediction at the end
+                if y_pool.size(1) <= n_seq_enc_look_back:
+                    y_pool = torch.cat((y_pool, y_new.unsqueeze(1)), dim=1).detach()
+                else:
+                    y_pool = torch.cat((y_pool[:, 1:, :], y_new.unsqueeze(1)), dim=1).detach()
 
-            # loss / metric
-            loss_temp_sum += criterion(y_pred, y_true)
-            metric_temp_sum += metric(y_pred, y_true)
+            # Adaptor
+            if 'enable_adaptor' in config and config.enable_adaptor:
+                y_pred = adaptor.compute(y_pred)
 
-        # normalize by decoding length
-        loss_temp = loss_temp_sum / config.n_seq_dec_total
-        metric_temp = metric_temp_sum / config.n_seq_dec_total
+            # Criterion & Metrics
+            loss_temp = criterion(y_pred, y_true)
+            loss_temp_sum += loss_temp.cpu().item()
+            metric_temp = metric(y_pred, y_true)
+            metric_temp_sum += metric_temp.cpu().item()
 
-        loss_temp.backward()
+            # Backward and Optimization
+            optimizer.zero_grad()
+            loss_temp.backward()
+            optimizer.step()
 
-        if config.enable_gradient_clip:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip_norm)
-
-        optimizer.step()
-
-        train_loss_sum += float(loss_temp.detach().item())
-        train_metric_sum += float(metric_temp.detach().item())
+        train_loss_sum += loss_temp_sum / config.n_seq_dec_pool
+        train_metric_sum += metric_temp_sum / config.n_seq_dec_pool
 
         # print progress
-        if (i_loader % PRINT_INTERVAL == 0) and ('enable_print_batch' in config and config.enable_print_batch):
+        if i_loader % PRINT_INTERVAL == 0:
             train_print_step += 1
             if progress_bar is not None:
                 progress_bar.set_description(
@@ -172,57 +151,51 @@ def _eval_one_epoch_on_loader(
     n_seq_enc_look_back: int,
     n_seq_enc_total: int,
 ):
-    loss_sum = 0.0
-    metric_sum = 0.0
+    val_loss_sum = 0.0
+    val_metric_sum = 0.0
     t_start = time.time()
 
     model.eval()
     for i_loader, (index, x_img, x_param, x_pos, y) in enumerate(loader):
-        # auto-regression pool
+        # auto-regression:
         if enable_auto_regression:
             y_pool = torch.zeros(config.batch_size, 1, config.output_size, device=y.device)
 
-        x_enc, y_enc = x_img, y[:, :n_seq_enc_total, :]
-        if config.enable_img:
-            x_enc = x_enc.to(config.device)
-        if config.enable_param:
-            x_param = x_param.to(config.device)
-        if config.enable_pos:
-            x_pos = x_pos.to(config.device)
-        y_enc = y_enc.to(config.device)
-        y = y.to(config.device)
+        loss_temp_sum = 0
+        metric_temp_sum = 0
+        for i_dec in range(config.n_seq_dec_pool):
+            # Forward
+            y_pred = model(x_img[:, i_dec:i_dec + n_seq_enc_total, :],
+                           x_param[:, i_dec:i_dec + n_seq_enc_total, :],
+                           x_pos[:, i_dec:i_dec + n_seq_enc_total, :],
+                           y_pool if enable_auto_regression else None,
+                           reset_dec_hx=True,
+                           )
 
-        x = adaptor(x_enc, x_param, x_pos)
-
-        loss_temp_sum = 0.0
-        metric_temp_sum = 0.0
-
-        for i_dec in range(config.n_seq_dec_total):
             if enable_auto_regression:
-                y_pred = model(x, y_pool)
-                y_pred = y_pred[:, -1, :]
-            else:
-                y_pred = model(x)
-                y_pred = y_pred[:, i_dec, :]
+                # Shift elements left and insert the new prediction at the end
+                if y_pool.size(1) <= n_seq_enc_look_back:
+                    y_pool = torch.cat((y_pool, y_pred.unsqueeze(1)), dim=1).detach()
+                else:
+                    y_pool = torch.cat((y_pool[:, 1:, :], y_pred.unsqueeze(1)), dim=1).detach()
 
+            # Adaptor
+            if 'enable_adaptor' in config and config.enable_adaptor:
+                y_pred = adaptor.compute(y_pred)
+
+            # Criterion and metrics
             y_true = y[:, i_dec + n_seq_enc_look_back, :]
+            loss_temp = criterion(y_pred, y_true)
+            loss_temp_sum += loss_temp.cpu().item()
+            metric_temp = metric(y_pred, y_true)
+            metric_temp_sum += metric_temp.cpu().item()
 
-            loss_temp_sum += criterion(y_pred, y_true)
-            metric_temp_sum += metric(y_pred, y_true)
-
-            if enable_auto_regression:
-                # teacher forcing in eval (deterministic): feed true label
-                y_pool = torch.cat((y_pool, y_true.unsqueeze(1)), dim=1)
-
-        loss_temp = loss_temp_sum / config.n_seq_dec_total
-        metric_temp = metric_temp_sum / config.n_seq_dec_total
-
-        loss_sum += float(loss_temp.detach().item())
-        metric_sum += float(metric_temp.detach().item())
+        val_loss_sum += loss_temp_sum / config.n_seq_dec_pool
+        val_metric_sum += metric_temp_sum / config.n_seq_dec_pool
 
     loader_len = len(loader) if len(loader) > 0 else 1
-    loss_mean = loss_sum / loader_len
-    metric_mean = metric_sum / loader_len
+    loss_mean = val_loss_sum / loader_len
+    metric_mean = val_metric_sum / loader_len
     t_end = time.time()
 
     return loss_mean, metric_mean, (t_end - t_start)
@@ -254,7 +227,8 @@ def train_incremental(config):
         # In case of wildcard import behavior differences, fallback to direct name
         pass
 
-    domains = build_domains_from_dataset_names(dataset_name_list_by_type, exclusive=True)
+    domains, domain_file = build_domains_from_dataset_names(dataset_name_list_by_type)
+    print('> domains:\n', domains)
 
     # order (can be overridden from config)
     domain_order = getattr(config, "domain_order", ["const", "tooth", "sin", "square", "noise"])
@@ -265,7 +239,7 @@ def train_incremental(config):
     # -------------------------------------------------------------------------
     # NEW: global standardization once (then reuse config.param_mean/std, pos_mean/std)
     # -------------------------------------------------------------------------
-    global_dataset = MyCombinedDataset(config, dataset_names=dataset_name_list_by_type)
+    global_dataset = MyCombinedDataset(config, dataset_names=domain_file)
     if config.enable_standardize_feature:
         calculate_standardization(global_dataset, config)
 
@@ -317,6 +291,8 @@ def train_incremental(config):
 
     for phase in range(num_phases):
         for i_trained, d_train in enumerate(domain_order):
+            print(f"\n> Training starts for domain[{i_trained+1}/{len(domain_loaders)}]: ['{d_train}'], "
+                  f"batch size={len(domain_order)}")
             # -------------------------
             # Train this domain for epochs_per_domain epochs
             # -------------------------
@@ -353,6 +329,8 @@ def train_incremental(config):
             # -------------------------
             # Evaluate on all domains and save NxN matrices
             # -------------------------
+            print(f"\n> Evaluation starts for domain[{i_trained}]: {d_train}, "
+                  f"file len={len(domain_loaders[d_train]['train'])}")
             for split in eval_splits:
                 loss_mat = np.full((N, N), np.nan, dtype=np.float64)
                 metric_mat = np.full((N, N), np.nan, dtype=np.float64)
@@ -370,9 +348,13 @@ def train_incremental(config):
                         n_seq_enc_look_back=n_seq_enc_look_back,
                         n_seq_enc_total=n_seq_enc_total,
                     )
+
                     loss_mat[i_trained, j_eval] = loss_mean
                     metric_mat[i_trained, j_eval] = metric_mean
                     long_log.append([phase, d_train, d_eval, split, loss_mean, metric_mean, global_epoch])
+
+                print(f">loss_matrix\n", loss_mat)
+                print(f">metric_matrix\n", metric_mat)
 
                 # save matrices after training domain d_train
                 _save_matrix_csv(

@@ -167,7 +167,6 @@ _DOMAIN_PRIORITY = ("noise", "tooth", "sin", "square", "const")
 def build_domains_from_dataset_names(
     names: list[str],
     *,
-    exclusive: bool = True,
     priority: tuple[str, ...] = _DOMAIN_PRIORITY
 ) -> dict[str, list[str]]:
     """
@@ -175,22 +174,22 @@ def build_domains_from_dataset_names(
     Names are expected like: <Low|High>_<patternA>_<patternB>_<id>
     """
     domains = {k: [] for k in priority}
-
-    if exclusive:
-        for n in names:
+    file_list = []
+    for n in names:
+        n_split = n.split("_")
+        if len(n_split) > 2:
+            target_type = n_split[-2]       # CURRENTLY: Only study the speed pattern
             for k in priority:
-                if f"_{k}_" in n:
-                    domains[k].append(n)
+                if k == target_type:
+                    file_name = f"{n}_dataset.pt"
+                    domains[k].append(file_name)
+                    file_list.append(file_name)
                     break
             else:
-                raise ValueError(f"Cannot assign dataset '{n}' to any domain in {priority}")
-    else:
-        for n in names:
-            for k in priority:
-                if f"_{k}_" in n:
-                    domains[k].append(n)
-
-    return domains
+                print(f"Cannot assign dataset '{n}' to any domain in {priority}")
+        else:
+            print(f"Cannot assign dataset '{n}' to any domain in {priority} (illegal pattern)")
+    return domains, file_list
 
 
 def _dataset_names_to_pt_files(dataset_names: list[str]) -> list[str]:
@@ -372,7 +371,7 @@ class MyCombinedDataset(Dataset):
         file_list = sorted(file_list)
 
         # Keep existing "iterate ratio" behavior
-        file_num = int(len(file_list) * config.dataset_iterate_ratio)
+        file_num = max(1, int(len(file_list) * config.dataset_iterate_ratio))
         file_list = file_list[:file_num] if file_num > 0 else []
 
         self.dataset_num = file_num
