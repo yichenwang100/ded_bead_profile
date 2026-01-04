@@ -9,7 +9,7 @@ seed: 42
 enable_rewrite_output_dir: True
 output_dir: './output/p2_ded_bead_profile/v22.0'  # relative to data_root_dir
 enable_uuid_naming: True # if false, use customized naming
-extra_name: 'incremental.standardize.sample_0.1.enc_201_ah_0.label_6.b64.lr_0.4e-5_0.985.loss_008812'
+extra_name: 'incremental.standardize.sample_1.0.enc_201_ah_0.label_6.b64.lr_0.4e-5_0.985.loss_008812'
 #extra_name: 'enc_301_ah_200'
 training_mode: 'default' # training model: 'default', 'epoch_time_test', 'seq_len_test', 'benchmark_test'
 
@@ -18,7 +18,7 @@ dataset_dir: './dataset/p2_ded_bead_profile/20240919'  # relative to data_root_d
 raw_timestamp_interval: 2.5  # ms
 ## Dataset and Dataloader
 enable_iterate_dataset: True # iterate for all sub datasets in the dataset_dir
-dataset_iterate_ratio: 0.1 # use only portion of the dataset
+dataset_iterate_ratio: 1.0 # use only portion of the dataset
 dataset_name: 'High_const_sin_1_dataset.pt' # 'simu_data' for random init, not used when enable_iterate_dataset == True
 enable_deploy_dataset: False
 dataset_exclude_for_deploy: ['Low_noise_noise_1_dataset.pt', 'Low_noise_noise_2_dataset.pt', 'Low_const_const_1_dataset.pt', 'Low_const_const_2_dataset.pt', 'High_sin_tooth_1_dataset.pt', 'High_sin_tooth_2_dataset.pt'] # used when enable_deploy_dataset == True
@@ -73,7 +73,7 @@ preload_param_path: '/home/ubuntu/Desktop/mydata/output/p2_ded_bead_profile/v13.
 ## embedding
 feature_embed_option: 'default' # 'fc', 'default'
 embed_preload_param: False
-embed_require_grad: False  # --- ABLATION + Transfer learning
+embed_require_grad: True  # --- ABLATION + Transfer learning
 embed_dim: -1 # auto calculated
 ## embedding / Img
 enable_img_embed: True   # --- ABLATION
@@ -87,7 +87,7 @@ pos_embed_exclude: None
 pos_embed_dim: 6
 ## encoder
 encoder_preload_param: False
-encoder_require_grad: False  # --- ABLATION + Transfer learning
+encoder_require_grad: True  # --- ABLATION + Transfer learning
 encoder_layer_size: 1   # --- ABLATION
 encoder_num_heads: 4
 enable_residual_gamma: False   # --- ABLATION

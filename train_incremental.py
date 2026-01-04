@@ -33,6 +33,9 @@ def _ensure_unique_preserve_order(items: list[str]) -> list[str]:
     """Deduplicate while preserving order."""
     return list(dict.fromkeys(items))
 
+def _reset_learning_rate(optimizer, base_lr):
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = base_lr
 
 # =============================================================================
 # NEW (Incremental Learning): wrappers around existing epoch logic
@@ -126,7 +129,8 @@ def _train_one_epoch_on_loader(
             if progress_bar is not None:
                 progress_bar.set_description(
                     f"Ep {epoch:04d} | step {train_print_step:04d} | "
-                    f"train_L={loss_temp.item():.4f} train_M={metric_temp.item():.4f}"
+                    f"train_L={loss_temp.item():.4f} train_M={metric_temp.item():.4f} | "
+                    f"lr={optimizer.param_groups[0]['lr']:.2e} |  "
                 )
 
     train_loader_len = len(loader) if len(loader) > 0 else 1
@@ -296,7 +300,10 @@ def train_incremental(config):
 
         for i_trained, d_train in enumerate(domain_order):
             print(f"\n> Training starts for domain[{i_trained+1}/{len(domain_loaders)}]: ['{d_train}'], "
-                  f"batch size={len(domain_order)}")
+                  f"batch number={len(domain_loaders[d_train]['train'])}")
+            # reset lr for the scheduler
+            _reset_learning_rate(optimizer, config['lr'])
+
             # -------------------------
             # Train this domain for epochs_per_domain epochs
             # -------------------------
@@ -333,7 +340,7 @@ def train_incremental(config):
             # -------------------------
             # Evaluate on all domains and save NxN matrices
             # -------------------------
-            print(f"\n> Evaluation starts for domain[{i_trained}]: {d_train}, "
+            print(f"\n> Evaluation starts for domain[{i_trained+1}]: '{d_train}', "
                   f"file len={len(domain_loaders[d_train]['train'])}")
             for split in eval_splits:
                 for j_eval, d_eval in enumerate(domain_order):
