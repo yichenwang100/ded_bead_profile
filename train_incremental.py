@@ -248,8 +248,9 @@ def train_incremental(config):
     for d in domain_order:
         domain_dataset = MyCombinedDataset(config, dataset_names=domains[d])
 
-        if config.enable_standardize_feature:
-            domain_dataset.apply_standardization(config)
+        # disabled for this is already standardized for all dataset:
+        # if config.enable_standardize_feature:
+        #     domain_dataset.apply_standardization(config)
         if config.enable_exclude_feature:
             domain_dataset.apply_exclusion(config)
 
@@ -290,6 +291,9 @@ def train_incremental(config):
     long_log = []  # phase, trained_domain, eval_domain, split, loss, metric, global_epoch
 
     for phase in range(num_phases):
+        loss_mat = np.full((N, N), np.nan, dtype=np.float64)
+        metric_mat = np.full((N, N), np.nan, dtype=np.float64)
+
         for i_trained, d_train in enumerate(domain_order):
             print(f"\n> Training starts for domain[{i_trained+1}/{len(domain_loaders)}]: ['{d_train}'], "
                   f"batch size={len(domain_order)}")
@@ -332,9 +336,6 @@ def train_incremental(config):
             print(f"\n> Evaluation starts for domain[{i_trained}]: {d_train}, "
                   f"file len={len(domain_loaders[d_train]['train'])}")
             for split in eval_splits:
-                loss_mat = np.full((N, N), np.nan, dtype=np.float64)
-                metric_mat = np.full((N, N), np.nan, dtype=np.float64)
-
                 for j_eval, d_eval in enumerate(domain_order):
                     loss_mean, metric_mean, eval_dt = _eval_one_epoch_on_loader(
                         config=config,
@@ -353,8 +354,8 @@ def train_incremental(config):
                     metric_mat[i_trained, j_eval] = metric_mean
                     long_log.append([phase, d_train, d_eval, split, loss_mean, metric_mean, global_epoch])
 
-                print(f">loss_matrix\n", loss_mat)
-                print(f">metric_matrix\n", metric_mat)
+                print(f">loss_matrix for {split}\n", loss_mat)
+                print(f">metric_matrix for {split}\n", metric_mat)
 
                 # save matrices after training domain d_train
                 _save_matrix_csv(
