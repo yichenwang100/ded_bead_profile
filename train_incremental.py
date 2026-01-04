@@ -236,7 +236,7 @@ def train_incremental(config):
     Incremental/continual learning training:
       - domains are semantic types: const/tooth/sin/square/noise
       - train sequentially domain-by-domain
-      - 100 epochs per domain (config.epochs_per_domain)
+      - 100 epochs per domain (config.num_epochs)
       - after each domain training, evaluate on ALL domains and record NxN matrices (loss + metric)
       - global mean/std computed once on all datasets (dataset_name_list_by_type)
       - optimizer/scheduler continuity preserved (no reset between domains)
@@ -296,8 +296,8 @@ def train_incremental(config):
 
     # NEW controls
     num_phases = getattr(config, "num_phases", 1)
-    epochs_per_domain = getattr(config, "epochs_per_domain", 100)
-    eval_splits = getattr(config, "eval_splits", ["val", "test"])
+    epochs_per_domain = getattr(config, "num_epochs", 100)
+    eval_splits = ["val", "test"]
 
     # optional tensorboard
     logger = None
@@ -413,15 +413,4 @@ def train_incremental(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     config = get_config_from_cmd(parser)
-
-    # Minimal defaults if not in config.yaml
-    if not hasattr(config, "num_phases"):
-        config.num_phases = 3
-    if not hasattr(config, "epochs_per_domain"):
-        config.epochs_per_domain = 100
-    if not hasattr(config, "eval_splits"):
-        config.eval_splits = ["val", "test"]
-    if not hasattr(config, "domain_order"):
-        config.domain_order = ["const", "tooth", "sin", "square", "noise"]
-
     train_incremental(config)
