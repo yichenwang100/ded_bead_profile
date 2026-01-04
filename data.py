@@ -151,6 +151,55 @@ excel_headers = [
     "REAL_PROFILE"
 ]
 
+
+'''***********************************************************************'''
+'''Dataset update for incremental learning '''
+'''***********************************************************************'''
+
+# for incremental learning
+dataset_name_list_by_type = dataset_name_list + dataset_exclude_for_deploy
+
+# De-duplicate while preserving order (deterministic)
+dataset_name_list_by_type = list(dict.fromkeys(dataset_name_list_by_type))
+
+_DOMAIN_PRIORITY = ("noise", "tooth", "sin", "square", "const")
+
+def build_domains_from_dataset_names(
+    names: list[str],
+    *,
+    exclusive: bool = True,
+    priority: tuple[str, ...] = _DOMAIN_PRIORITY
+) -> dict[str, list[str]]:
+    """
+    Split datasets into semantic 'domains' based on pattern tokens in dataset name.
+    Names are expected like: <Low|High>_<patternA>_<patternB>_<id>
+    """
+    domains = {k: [] for k in priority}
+
+    if exclusive:
+        for n in names:
+            for k in priority:
+                if f"_{k}_" in n:
+                    domains[k].append(n)
+                    break
+            else:
+                raise ValueError(f"Cannot assign dataset '{n}' to any domain in {priority}")
+    else:
+        for n in names:
+            for k in priority:
+                if f"_{k}_" in n:
+                    domains[k].append(n)
+
+    return domains
+
+
+def _dataset_names_to_pt_files(dataset_names: list[str]) -> list[str]:
+    """
+    Convert dataset base names into actual .pt filenames.
+    Accepts either 'XXX' or 'XXX.pt'.
+    """
+    return [n if n.endswith(".pt") else f"{n}.pt" for n in dataset_names]
+
 '''***********************************************************************'''
 '''Dataset and Dataloader'''
 '''***********************************************************************'''
@@ -293,19 +342,38 @@ class MyDataset(Dataset):
 
 
 class MyCombinedDataset(Dataset):
-    def __init__(self, config):
-        if not config.enable_deploy_dataset:
-            # iterate all dataset in the folder
-            file_list = [file for file in os.listdir(config.machine_dataset_dir)
-                         if file.endswith('.pt')
-                         and file not in config.dataset_exclude_for_deploy]
-            file_num = int(len(file_list) * config.dataset_iterate_ratio)
-            file_list = file_list[:file_num]
+    def __init__(self,
+                 config,
+                 dataset_names: list[str] | None = None,
+                 file_list_override: list[str] | None = None):
+        """
+        If dataset_names or file_list_override is provided, only those datasets are loaded.
+        - dataset_names: list of base dataset names (without .pt) OR filenames (with .pt)
+        - file_list_override: explicit list of filenames (with .pt)
+        """
+        if file_list_override is not None:
+            file_list = list(file_list_override)
+        elif dataset_names is not None:
+            file_list = _dataset_names_to_pt_files(dataset_names)
         else:
-            file_list = [file for file in os.listdir(config.machine_dataset_dir)
-                         if file.endswith('.pt')
-                         and file in config.dataset_exclude_for_deploy]
-            file_num = len(file_list)
+            if not config.enable_deploy_dataset:
+                # iterate all dataset in the folder
+                file_list = [
+                    file for file in os.listdir(config.machine_dataset_dir)
+                    if file.endswith('.pt') and file not in config.dataset_exclude_for_deploy
+                ]
+            else:
+                file_list = [
+                    file for file in os.listdir(config.machine_dataset_dir)
+                    if file.endswith('.pt') and file in config.dataset_exclude_for_deploy
+                ]
+
+        # Deterministic ordering is important for reproducibility
+        file_list = sorted(file_list)
+
+        # Keep existing "iterate ratio" behavior
+        file_num = int(len(file_list) * config.dataset_iterate_ratio)
+        file_list = file_list[:file_num] if file_num > 0 else []
 
         self.dataset_num = file_num
         self.datasets = []
