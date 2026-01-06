@@ -276,7 +276,8 @@ def train_incremental(config):
     # NEW controls
     num_phases = getattr(config, "num_phases", 1)
     epochs_per_domain = getattr(config, "num_epochs", 100)
-    eval_splits = ["val", "test"]
+    # eval_splits = ["val", "test"] # same in this code, so just use 'test'
+    eval_splits = ["test"]
 
     # optional tensorboard
     logger = None
@@ -299,7 +300,8 @@ def train_incremental(config):
         metric_mat = np.full((N, N), np.nan, dtype=np.float64)
 
         for i_trained, d_train in enumerate(domain_order):
-            print(f"\n> Training starts for domain[{i_trained+1}/{len(domain_loaders)}]: ['{d_train}'], "
+            print(f"\n> Phase {phase+1}/{num_phases} | "
+                  f"Training starts for domain[{i_trained+1}/{len(domain_loaders)}]: ['{d_train}'], "
                   f"batch number={len(domain_loaders[d_train]['train'])}")
             # reset lr for the scheduler
             _reset_learning_rate(optimizer, config['lr'])
@@ -361,7 +363,7 @@ def train_incremental(config):
                     metric_mat[i_trained, j_eval] = metric_mean
                     long_log.append([phase, d_train, d_eval, split, loss_mean, metric_mean, global_epoch])
 
-                print(f">loss_matrix for {split}\n", loss_mat)
+                # print(f">loss_matrix for {split}\n", loss_mat)
                 print(f">metric_matrix for {split}\n", metric_mat)
 
                 # save matrices after training domain d_train
