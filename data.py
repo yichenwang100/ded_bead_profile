@@ -352,8 +352,10 @@ class MyCombinedDataset(Dataset):
         """
         if file_list_override is not None:
             file_list = list(file_list_override)
-        elif dataset_names is not None:
-            file_list = _dataset_names_to_pt_files(dataset_names)
+            file_list = [
+                file for file in os.listdir(config.machine_dataset_dir)
+                if file.endswith('.pt')
+            ]
         else:
             if not config.enable_deploy_dataset:
                 # iterate all dataset in the folder
@@ -374,6 +376,7 @@ class MyCombinedDataset(Dataset):
         file_num = max(1, int(len(file_list) * config.dataset_iterate_ratio))
         file_list = file_list[:file_num] if file_num > 0 else []
 
+        self.file_list = file_list
         self.dataset_num = file_num
         self.datasets = []
         self.dataset_len = []
