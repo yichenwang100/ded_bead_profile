@@ -17,8 +17,7 @@ from util import *
 from data import *
 from model import *
 
-PRINT_INTERVAL = 5
-
+PRINT_INTERVAL = 20
 
 # =============================================================================
 # NEW (Incremental Learning): utility helpers
@@ -57,6 +56,7 @@ def _train_one_epoch_on_loader(
         epoch: int,
         progress_bar=None,
 ):
+    num_epochs = config.num_epochs
     n_seq_enc_look_back = config.n_seq_enc_look_back
     train_loss_sum = 0.0
     train_metric_sum = 0.0
@@ -88,9 +88,9 @@ def _train_one_epoch_on_loader(
         if i_loader % PRINT_INTERVAL == 0:
             if progress_bar is not None:
                 progress_bar.set_description(
-                    f"Ep {epoch:04d} | "
-                    f"train_L={loss_temp.item():.4f} train_M={metric_temp.item():.4f} | "
-                    f"train_M_mean={train_metric_sum/(i_loader + 1):.4f | }"
+                    f"Ep {epoch+1:03d}/{num_epochs}| "
+                    f"Train: L={loss_temp.item():.4f} M={metric_temp.item():.4f} "
+                    f"M_mean={train_metric_sum/(i_loader + 1):.4f} | "
                     f"lr={optimizer.param_groups[0]['lr']:.2e} |  "
                 )
 
@@ -237,7 +237,7 @@ def train_incremental(config):
             # -------------------------
             # Train this domain for epochs_per_domain epochs
             # -------------------------
-            progress_bar = tqdm(range(epochs_per_domain), ncols=110)
+            progress_bar = tqdm(range(epochs_per_domain), ncols=140)
             for _ in progress_bar:
                 train_loss_mean, train_metric_mean, train_dt = _train_one_epoch_on_loader(
                     config=config,
@@ -255,10 +255,8 @@ def train_incremental(config):
                     model=model,
                     criterion=criterion,
                     metric=metric,
-                    optimizer=optimizer,
-                    loader=domain_loaders[d_train]["val"],
-                    epoch=global_epoch,
-                    progress_bar=progress_bar,
+                    loader=domain_loaders[d_train]['val'],
+                    n_seq_enc_look_back=n_seq_enc_look_back,
                 )
 
                 # scheduler continuity (same rule as train.py)
@@ -297,13 +295,13 @@ def train_incremental(config):
 
         # save matrices after training domain d_train
         _save_matrix_csv(
-            path=os.path.join(out_dir, f"phase_{phase:02d}_loss_matrix.csv"),
+            path=os.path.join(out_dir, f"phase_{phase+1:02d}_loss_matrix.csv"),
             matrix=loss_mat,
             row_labels=domain_order, col_labels=domain_order
         )
         _save_matrix_csv(
             path=os.path.join(out_dir,
-                         f"phase_{phase:02d}_metric_matrix.csv"),
+                         f"phase_{phase+1:02d}_metric_matrix.csv"),
             matrix=metric_mat,
             row_labels=domain_order, col_labels=domain_order
         )
