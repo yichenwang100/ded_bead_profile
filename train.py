@@ -157,7 +157,7 @@ def train(config):
             logger.add_scalars("epoch_metric", {'train': train_metric_mean}, global_step=epoch)
 
         # Adaptive learning rate
-        if config.enable_adaptive_lr and epoch < config.lr_adaptive_max_epoch:
+        if config.enable_adaptive_lr:
             scheduler.step()
 
         '''-------------------------------------------------------------------------------------------------'''
