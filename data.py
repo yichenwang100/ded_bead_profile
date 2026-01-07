@@ -393,7 +393,6 @@ class MyDataset(Dataset):
 class MyCombinedDataset(Dataset):
     def __init__(self,
                  config,
-                 dataset_names: list[str] | None = None,
                  file_list_override: list[str] | None = None):
         """
         If dataset_names or file_list_override is provided, only those datasets are loaded.

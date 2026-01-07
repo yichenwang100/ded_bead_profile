@@ -161,13 +161,13 @@ def train_incremental_baseline(config):
 
     # global standardization once
     if config.enable_standardize_feature:
-        global_dataset = MyCombinedDataset(config, dataset_names=domain_files)
+        global_dataset = MyCombinedDataset(config, file_list_override=domain_files)
         calculate_standardization(global_dataset, config)
 
     # per-domain loaders
     domain_loaders = {}
     for d in domain_order:
-        domain_dataset = MyCombinedDataset(config, dataset_names=domain_dict[d])
+        domain_dataset = MyCombinedDataset(config, file_list_override=domain_dict[d],)
 
         if config.enable_exclude_feature:
             domain_dataset.apply_exclusion(config)
@@ -384,17 +384,17 @@ def train_incremental_replay(config):
 
     # global standardization once
     if config.enable_standardize_feature:
-        global_dataset = MyCombinedDataset(config, dataset_names=domain_files)
+        global_dataset = MyCombinedDataset(config, file_list_override=domain_files)
         calculate_standardization(global_dataset, config)
 
     # Build per-domain datasets (NOT loaders yet; we need train subsets for replay mixing)
     per_domain_datasets = {}
     for d in domain_order:
-        dataset = MyCombinedDataset(config, dataset_names=domain_dict[d])
+        domain_dataset = MyCombinedDataset(config, file_list_override=domain_dict[d],)
         if config.enable_exclude_feature:
-            dataset.apply_exclusion(config)
+            domain_dataset.apply_exclusion(config)
 
-        train_dataset, val_dataset, test_dataset, _, _, _ = split_dataset(dataset, config, shuffle=True)
+        train_dataset, val_dataset, test_dataset, _, _, _ = split_dataset(domain_dataset, config, shuffle=True)
 
         per_domain_datasets[d] = {"train": train_dataset, "val": val_dataset, "test": test_dataset}
 
@@ -641,13 +641,13 @@ def train_incremental_regularization(config):
 
     # global standardization once
     if config.enable_standardize_feature:
-        global_dataset = MyCombinedDataset(config, dataset_names=domain_files)
+        global_dataset = MyCombinedDataset(config, file_list_override=domain_files)
         calculate_standardization(global_dataset, config)
 
     # per-domain loaders
     domain_loaders = {}
     for d in domain_order:
-        domain_dataset = MyCombinedDataset(config, dataset_names=domain_dict[d])
+        domain_dataset = MyCombinedDataset(config, file_list_override=domain_dict[d],)
 
         if config.enable_exclude_feature:
             domain_dataset.apply_exclusion(config)
@@ -863,13 +863,13 @@ def train_incremental_distillation(config):
 
     # global standardization once
     if config.enable_standardize_feature:
-        global_dataset = MyCombinedDataset(config, dataset_names=domain_files)
+        global_dataset = MyCombinedDataset(config, file_list_override=domain_files)
         calculate_standardization(global_dataset, config)
 
     # per-domain loaders
     domain_loaders = {}
     for d in domain_order:
-        domain_dataset = MyCombinedDataset(config, dataset_names=domain_dict[d])
+        domain_dataset = MyCombinedDataset(config, file_list_override=domain_dict[d],)
 
         if config.enable_exclude_feature:
             domain_dataset.apply_exclusion(config)
