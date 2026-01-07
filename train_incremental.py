@@ -581,7 +581,10 @@ def _ewc_compute_fisher(
     Estimate diagonal Fisher via average squared gradients of loss.
     For regression (your setting), this works as a practical approximation.
     """
-    model.eval()  # deterministic grads (dropout off)
+    # model.eval()  # deterministic grads (dropout off)
+
+    was_training = model.training   # memorize training configure
+    model.train()   # cudnn RNN backward required training
     fisher = _ewc_zero_fisher_like(model)
 
     n_batches = 0
@@ -608,6 +611,7 @@ def _ewc_compute_fisher(
     for k in fisher:
         fisher[k] /= float(n_batches)
 
+    model.train(was_training)   # restore training state
     return fisher
 
 
@@ -722,7 +726,7 @@ def train_incremental_regularization(config):
         metric_mat = np.full((num_domain, num_domain), np.nan, dtype=np.float64)
 
         for i_trained, d_train in enumerate(domain_order):
-            print(f"\n> Phase {phase + 1}/{num_phases} | "
+            print(f"\n> [Regularize] Phase {phase + 1}/{num_phases} | "
                   f"Training starts for domain[{i_trained + 1}/{len(domain_loaders)}]: ['{d_train}'], "
                   f"batch number for train={len(domain_loaders[d_train]['train'])}")
 
@@ -793,7 +797,7 @@ def train_incremental_regularization(config):
                 metric_mat[i_trained, j_eval] = metric_mean
                 long_log.append([phase, d_train, d_eval, loss_mean, metric_mean, global_epoch])
 
-            print(f">metric_matrix for test set")
+            print(f"> [Regularize] metric_matrix for test set")
             pprint(metric_mat)
 
         _save_matrix_csv(
@@ -1030,7 +1034,7 @@ def train_incremental_distillation(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     config = get_config_from_cmd(parser)
-    train_incremental_baseline(config)
-    # train_incremental_replay(config)
-    # train_incremental_regularization(config)
-    # train_incremental_distillation(config)
+    # train_incremental_baseline(config)    # baseline
+    # train_incremental_replay(config)    # replay
+    train_incremental_regularization(config)  # regularize
+    # train_incremental_distillation(config)    # distill
