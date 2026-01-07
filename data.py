@@ -23,12 +23,64 @@ from util import *
 '''Project related settings'''
 '''***********************************************************************'''
 
-dataset_name_list = ['Low_const_const_1', 'Low_const_const_2', 'Low_const_tooth_1', 'Low_const_tooth_2', 'Low_const_sin_1', 'Low_const_sin_2', 'Low_const_square_1', 'Low_const_square_2', 'Low_tooth_const_1', 'Low_tooth_const_2', 'Low_tooth_tooth_1', 'Low_tooth_tooth_2', 'Low_tooth_sin_1', 'Low_tooth_sin_2', 'Low_tooth_square_1', 'Low_tooth_square_2', 'Low_tooth_noise_1', 'Low_tooth_noise_2', 'Low_sin_const_1', 'Low_sin_const_2', 'Low_sin_tooth_1', 'Low_sin_tooth_2', 'Low_sin_sin_1', 'Low_sin_sin_2', 'Low_sin_square_1', 'Low_sin_square_2', 'Low_square_const_1', 'Low_square_const_2', 'Low_square_tooth_1', 'Low_square_tooth_2', 'Low_square_sin_1', 'Low_square_sin_2', 'Low_square_square_1', 'Low_square_square_2', 'Low_noise_tooth_1', 'Low_noise_tooth_2', 'Low_noise_noise_1', 'Low_noise_noise_2', 'High_const_tooth_1', 'High_const_tooth_2', 'High_const_sin_1', 'High_const_sin_2', 'High_const_square_1', 'High_const_square_2', 'High_tooth_const_1', 'High_tooth_const_2', 'High_tooth_tooth_1', 'High_tooth_tooth_2', 'High_tooth_sin_1', 'High_tooth_sin_2', 'High_tooth_square_1', 'High_tooth_square_2', 'High_sin_const_1', 'High_sin_const_2', 'High_sin_tooth_1', 'High_sin_tooth_2', 'High_sin_sin_1', 'High_sin_sin_2', 'High_sin_square_1', 'High_sin_square_2', 'High_square_const_1', 'High_square_const_2', 'High_square_tooth_1', 'High_square_tooth_2', 'High_square_sin_1', 'High_square_sin_2', 'High_square_square_1', 'High_square_square_2', 'CADPrint_Drawing3', 'CADPrint_Drawing4', 'CADPrint_Drawing6']
+dataset_name_list = ['Low_const_const_1', 'Low_const_const_2', 'Low_const_tooth_1', 'Low_const_tooth_2',
+                     'Low_const_sin_1', 'Low_const_sin_2', 'Low_const_square_1', 'Low_const_square_2',
+                     'Low_tooth_const_1', 'Low_tooth_const_2', 'Low_tooth_tooth_1', 'Low_tooth_tooth_2',
+                     'Low_tooth_sin_1', 'Low_tooth_sin_2', 'Low_tooth_square_1', 'Low_tooth_square_2',
+                     'Low_tooth_noise_1', 'Low_tooth_noise_2', 'Low_sin_const_1', 'Low_sin_const_2', 'Low_sin_tooth_1',
+                     'Low_sin_tooth_2', 'Low_sin_sin_1', 'Low_sin_sin_2', 'Low_sin_square_1', 'Low_sin_square_2',
+                     'Low_square_const_1', 'Low_square_const_2', 'Low_square_tooth_1', 'Low_square_tooth_2',
+                     'Low_square_sin_1', 'Low_square_sin_2', 'Low_square_square_1', 'Low_square_square_2',
+                     'Low_noise_tooth_1', 'Low_noise_tooth_2', 'Low_noise_noise_1', 'Low_noise_noise_2',
+                     'High_const_tooth_1', 'High_const_tooth_2', 'High_const_sin_1', 'High_const_sin_2',
+                     'High_const_square_1', 'High_const_square_2', 'High_tooth_const_1', 'High_tooth_const_2',
+                     'High_tooth_tooth_1', 'High_tooth_tooth_2', 'High_tooth_sin_1', 'High_tooth_sin_2',
+                     'High_tooth_square_1', 'High_tooth_square_2', 'High_sin_const_1', 'High_sin_const_2',
+                     'High_sin_tooth_1', 'High_sin_tooth_2', 'High_sin_sin_1', 'High_sin_sin_2', 'High_sin_square_1',
+                     'High_sin_square_2', 'High_square_const_1', 'High_square_const_2', 'High_square_tooth_1',
+                     'High_square_tooth_2', 'High_square_sin_1', 'High_square_sin_2', 'High_square_square_1',
+                     'High_square_square_2', 'CADPrint_Drawing3', 'CADPrint_Drawing4', 'CADPrint_Drawing6']
 dataset_exclude_for_deploy = ['Low_noise_noise_1', 'Low_noise_noise_2',
                               'Low_const_const_1', 'Low_const_const_2',
                               'High_sin_tooth_1', 'High_sin_tooth_2']
-map_dataset_name_to_raw_id = bidict({'Low_const_const_1': 1, 'Low_const_const_2': 2, 'Low_const_tooth_1': 3, 'Low_const_tooth_2': 4, 'Low_const_sin_1': 5, 'Low_const_sin_2': 6, 'Low_const_square_1': 7, 'Low_const_square_2': 8, 'Low_tooth_const_1': 11, 'Low_tooth_const_2': 12, 'Low_tooth_tooth_1': 13, 'Low_tooth_tooth_2': 14, 'Low_tooth_sin_1': 15, 'Low_tooth_sin_2': 16, 'Low_tooth_square_1': 17, 'Low_tooth_square_2': 18, 'Low_tooth_noise_1': 19, 'Low_tooth_noise_2': 20, 'Low_sin_const_1': 21, 'Low_sin_const_2': 22, 'Low_sin_tooth_1': 23, 'Low_sin_tooth_2': 24, 'Low_sin_sin_1': 25, 'Low_sin_sin_2': 26, 'Low_sin_square_1': 27, 'Low_sin_square_2': 28, 'Low_square_const_1': 31, 'Low_square_const_2': 32, 'Low_square_tooth_1': 33, 'Low_square_tooth_2': 34, 'Low_square_sin_1': 35, 'Low_square_sin_2': 36, 'Low_square_square_1': 37, 'Low_square_square_2': 38, 'Low_noise_tooth_1': 43, 'Low_noise_tooth_2': 44, 'Low_noise_noise_1': 49, 'Low_noise_noise_2': 50, 'High_const_tooth_1': 53, 'High_const_tooth_2': 54, 'High_const_sin_1': 55, 'High_const_sin_2': 56, 'High_const_square_1': 57, 'High_const_square_2': 58, 'High_tooth_const_1': 61, 'High_tooth_const_2': 62, 'High_tooth_tooth_1': 63, 'High_tooth_tooth_2': 64, 'High_tooth_sin_1': 65, 'High_tooth_sin_2': 66, 'High_tooth_square_1': 67, 'High_tooth_square_2': 68, 'High_sin_const_1': 71, 'High_sin_const_2': 72, 'High_sin_tooth_1': 73, 'High_sin_tooth_2': 74, 'High_sin_sin_1': 75, 'High_sin_sin_2': 76, 'High_sin_square_1': 77, 'High_sin_square_2': 78, 'High_square_const_1': 81, 'High_square_const_2': 82, 'High_square_tooth_1': 83, 'High_square_tooth_2': 84, 'High_square_sin_1': 85, 'High_square_sin_2': 86, 'High_square_square_1': 87, 'High_square_square_2': 88, 'CADPrint_Drawing3': 103, 'CADPrint_Drawing4': 104, 'CADPrint_Drawing6': 106})
-map_dataset_name_to_pub_id = bidict({'Low_const_const_1': 1, 'Low_const_const_2': 2, 'Low_const_tooth_1': 3, 'Low_const_tooth_2': 4, 'Low_const_sin_1': 5, 'Low_const_sin_2': 6, 'Low_const_square_1': 7, 'Low_const_square_2': 8, 'Low_tooth_const_1': 9, 'Low_tooth_const_2': 10, 'Low_tooth_tooth_1': 11, 'Low_tooth_tooth_2': 12, 'Low_tooth_sin_1': 13, 'Low_tooth_sin_2': 14, 'Low_tooth_square_1': 15, 'Low_tooth_square_2': 16, 'Low_tooth_noise_1': 17, 'Low_tooth_noise_2': 18, 'Low_sin_const_1': 19, 'Low_sin_const_2': 20, 'Low_sin_tooth_1': 21, 'Low_sin_tooth_2': 22, 'Low_sin_sin_1': 23, 'Low_sin_sin_2': 24, 'Low_sin_square_1': 25, 'Low_sin_square_2': 26, 'Low_square_const_1': 27, 'Low_square_const_2': 28, 'Low_square_tooth_1': 29, 'Low_square_tooth_2': 30, 'Low_square_sin_1': 31, 'Low_square_sin_2': 32, 'Low_square_square_1': 33, 'Low_square_square_2': 34, 'Low_noise_tooth_1': 35, 'Low_noise_tooth_2': 36, 'Low_noise_noise_1': 37, 'Low_noise_noise_2': 38, 'High_const_tooth_1': 39, 'High_const_tooth_2': 40, 'High_const_sin_1': 41, 'High_const_sin_2': 42, 'High_const_square_1': 43, 'High_const_square_2': 44, 'High_tooth_const_1': 45, 'High_tooth_const_2': 46, 'High_tooth_tooth_1': 47, 'High_tooth_tooth_2': 48, 'High_tooth_sin_1': 49, 'High_tooth_sin_2': 50, 'High_tooth_square_1': 51, 'High_tooth_square_2': 52, 'High_sin_const_1': 53, 'High_sin_const_2': 54, 'High_sin_tooth_1': 55, 'High_sin_tooth_2': 56, 'High_sin_sin_1': 57, 'High_sin_sin_2': 58, 'High_sin_square_1': 59, 'High_sin_square_2': 60, 'High_square_const_1': 61, 'High_square_const_2': 62, 'High_square_tooth_1': 63, 'High_square_tooth_2': 64, 'High_square_sin_1': 65, 'High_square_sin_2': 66, 'High_square_square_1': 67, 'High_square_square_2': 68, 'CADPrint_Drawing3': 69, 'CADPrint_Drawing4': 70, 'CADPrint_Drawing6': 71})
+map_dataset_name_to_raw_id = bidict(
+    {'Low_const_const_1': 1, 'Low_const_const_2': 2, 'Low_const_tooth_1': 3, 'Low_const_tooth_2': 4,
+     'Low_const_sin_1': 5, 'Low_const_sin_2': 6, 'Low_const_square_1': 7, 'Low_const_square_2': 8,
+     'Low_tooth_const_1': 11, 'Low_tooth_const_2': 12, 'Low_tooth_tooth_1': 13, 'Low_tooth_tooth_2': 14,
+     'Low_tooth_sin_1': 15, 'Low_tooth_sin_2': 16, 'Low_tooth_square_1': 17, 'Low_tooth_square_2': 18,
+     'Low_tooth_noise_1': 19, 'Low_tooth_noise_2': 20, 'Low_sin_const_1': 21, 'Low_sin_const_2': 22,
+     'Low_sin_tooth_1': 23, 'Low_sin_tooth_2': 24, 'Low_sin_sin_1': 25, 'Low_sin_sin_2': 26, 'Low_sin_square_1': 27,
+     'Low_sin_square_2': 28, 'Low_square_const_1': 31, 'Low_square_const_2': 32, 'Low_square_tooth_1': 33,
+     'Low_square_tooth_2': 34, 'Low_square_sin_1': 35, 'Low_square_sin_2': 36, 'Low_square_square_1': 37,
+     'Low_square_square_2': 38, 'Low_noise_tooth_1': 43, 'Low_noise_tooth_2': 44, 'Low_noise_noise_1': 49,
+     'Low_noise_noise_2': 50, 'High_const_tooth_1': 53, 'High_const_tooth_2': 54, 'High_const_sin_1': 55,
+     'High_const_sin_2': 56, 'High_const_square_1': 57, 'High_const_square_2': 58, 'High_tooth_const_1': 61,
+     'High_tooth_const_2': 62, 'High_tooth_tooth_1': 63, 'High_tooth_tooth_2': 64, 'High_tooth_sin_1': 65,
+     'High_tooth_sin_2': 66, 'High_tooth_square_1': 67, 'High_tooth_square_2': 68, 'High_sin_const_1': 71,
+     'High_sin_const_2': 72, 'High_sin_tooth_1': 73, 'High_sin_tooth_2': 74, 'High_sin_sin_1': 75, 'High_sin_sin_2': 76,
+     'High_sin_square_1': 77, 'High_sin_square_2': 78, 'High_square_const_1': 81, 'High_square_const_2': 82,
+     'High_square_tooth_1': 83, 'High_square_tooth_2': 84, 'High_square_sin_1': 85, 'High_square_sin_2': 86,
+     'High_square_square_1': 87, 'High_square_square_2': 88, 'CADPrint_Drawing3': 103, 'CADPrint_Drawing4': 104,
+     'CADPrint_Drawing6': 106})
+map_dataset_name_to_pub_id = bidict(
+    {'Low_const_const_1': 1, 'Low_const_const_2': 2, 'Low_const_tooth_1': 3, 'Low_const_tooth_2': 4,
+     'Low_const_sin_1': 5, 'Low_const_sin_2': 6, 'Low_const_square_1': 7, 'Low_const_square_2': 8,
+     'Low_tooth_const_1': 9, 'Low_tooth_const_2': 10, 'Low_tooth_tooth_1': 11, 'Low_tooth_tooth_2': 12,
+     'Low_tooth_sin_1': 13, 'Low_tooth_sin_2': 14, 'Low_tooth_square_1': 15, 'Low_tooth_square_2': 16,
+     'Low_tooth_noise_1': 17, 'Low_tooth_noise_2': 18, 'Low_sin_const_1': 19, 'Low_sin_const_2': 20,
+     'Low_sin_tooth_1': 21, 'Low_sin_tooth_2': 22, 'Low_sin_sin_1': 23, 'Low_sin_sin_2': 24, 'Low_sin_square_1': 25,
+     'Low_sin_square_2': 26, 'Low_square_const_1': 27, 'Low_square_const_2': 28, 'Low_square_tooth_1': 29,
+     'Low_square_tooth_2': 30, 'Low_square_sin_1': 31, 'Low_square_sin_2': 32, 'Low_square_square_1': 33,
+     'Low_square_square_2': 34, 'Low_noise_tooth_1': 35, 'Low_noise_tooth_2': 36, 'Low_noise_noise_1': 37,
+     'Low_noise_noise_2': 38, 'High_const_tooth_1': 39, 'High_const_tooth_2': 40, 'High_const_sin_1': 41,
+     'High_const_sin_2': 42, 'High_const_square_1': 43, 'High_const_square_2': 44, 'High_tooth_const_1': 45,
+     'High_tooth_const_2': 46, 'High_tooth_tooth_1': 47, 'High_tooth_tooth_2': 48, 'High_tooth_sin_1': 49,
+     'High_tooth_sin_2': 50, 'High_tooth_square_1': 51, 'High_tooth_square_2': 52, 'High_sin_const_1': 53,
+     'High_sin_const_2': 54, 'High_sin_tooth_1': 55, 'High_sin_tooth_2': 56, 'High_sin_sin_1': 57, 'High_sin_sin_2': 58,
+     'High_sin_square_1': 59, 'High_sin_square_2': 60, 'High_square_const_1': 61, 'High_square_const_2': 62,
+     'High_square_tooth_1': 63, 'High_square_tooth_2': 64, 'High_square_sin_1': 65, 'High_square_sin_2': 66,
+     'High_square_square_1': 67, 'High_square_square_2': 68, 'CADPrint_Drawing3': 69, 'CADPrint_Drawing4': 70,
+     'CADPrint_Drawing6': 71})
 
 param_str_list = [
     "EXP_ID",  #            0
@@ -47,16 +99,16 @@ param_str_list = [
 ]
 
 map_param_str_to_show_name = {
-    "EXP_ID": 'Exp_ID \n',   # 0
-    "POINT_ID": 'Point_ID \n',   #, 1
-    "FREQUENCY": 'Pattern \nFrequency', # 2
+    "EXP_ID": 'Exp_ID \n',  # 0
+    "POINT_ID": 'Point_ID \n',  #, 1
+    "FREQUENCY": 'Pattern \nFrequency',  # 2
     "POWER_PATTERN": 'Power \nPattern',  # 3
     "FEEDRATE_PATTERN": 'Speed \nPattern',  # 4
-    "LINEIDX": 'Line \nIndex', # 5
+    "LINEIDX": 'Line \nIndex',  # 5
     "RTCP": 'RTCP \n',  # 6   # 0 # used
-    "CLOCKWISE": 'Direction \n', # 7   # 1 # used
-    "CURVATURE":  'Curvature \n(1/mm)', # 8   # 2 # used
-    "POWER": 'Power \n(W)', # 9   # 3 # used
+    "CLOCKWISE": 'Direction \n',  # 7   # 1 # used
+    "CURVATURE": 'Curvature \n(1/mm)',  # 8   # 2 # used
+    "POWER": 'Power \n(W)',  # 9   # 3 # used
     "FEEDRATE": 'Speed \n(mm/min)',  # 10  # 4 # used
     "POWER_DIFF": 'Power Change \nRate (W/s)',  # 11  # 5 # excluded
     "FEEDRATE_DIFF": 'Speed Change \nRate (mm/s^2)',  # 12  # 6 # excluded
@@ -105,6 +157,7 @@ map_param_str_to_show_name = {
     'img_mean_value': 'Image Mean',
 }
 
+
 def param_id_to_str(id):
     return param_str_list[id]
 
@@ -151,7 +204,6 @@ excel_headers = [
     "REAL_PROFILE"
 ]
 
-
 '''***********************************************************************'''
 '''Dataset update for incremental learning '''
 '''***********************************************************************'''
@@ -162,34 +214,31 @@ dataset_name_list_by_type = dataset_name_list + dataset_exclude_for_deploy
 # De-duplicate while preserving order (deterministic)
 dataset_name_list_by_type = list(dict.fromkeys(dataset_name_list_by_type))
 
-_DOMAIN_PRIORITY = ("noise", "tooth", "sin", "square", "const")
 
-def build_domains_from_dataset_names(
-    names: list[str],
-    *,
-    priority: tuple[str, ...] = _DOMAIN_PRIORITY
-) -> dict[str, list[str]]:
+def build_domain_dict(
+        domain_list,
+        file_dir,
+):
     """
     Split datasets into semantic 'domains' based on pattern tokens in dataset name.
     Names are expected like: <Low|High>_<patternA>_<patternB>_<id>
     """
-    domains = {k: [] for k in priority}
+    domain_dict = {k: [] for k in domain_list}
     file_list = []
-    for n in names:
-        n_split = n.split("_")
-        if len(n_split) > 2:
-            target_type = n_split[-2]       # CURRENTLY: Only study the speed pattern
-            for k in priority:
-                if k == target_type:
-                    file_name = f"{n}_dataset.pt"
-                    domains[k].append(file_name)
-                    file_list.append(file_name)
-                    break
-            else:
-                print(f"Cannot assign dataset '{n}' to any domain in {priority}")
+    for file_name in os.listdir(file_dir):
+        n_split = file_name.split("_")
+        if len(n_split) != 5:
+            print(f"> illegal pattern for '{file_name}'")
+            continue
+
+        domain_name = n_split[-3]  # CURRENTLY: Only study the speed pattern
+        if domain_name in domain_list:
+            domain_dict[domain_name].append(file_name)
+            file_list.append(file_name)
         else:
-            print(f"Cannot assign dataset '{n}' to any domain in {priority} (illegal pattern)")
-    return domains, file_list
+            print(f"Cannot assign file '{file_name}' to any domain in {domain_list}")
+
+    return domain_dict, file_list
 
 
 def _dataset_names_to_pt_files(dataset_names: list[str]) -> list[str]:
@@ -198,6 +247,7 @@ def _dataset_names_to_pt_files(dataset_names: list[str]) -> list[str]:
     Accepts either 'XXX' or 'XXX.pt'.
     """
     return [n if n.endswith(".pt") else f"{n}.pt" for n in dataset_names]
+
 
 '''***********************************************************************'''
 '''Dataset and Dataloader'''
@@ -352,10 +402,6 @@ class MyCombinedDataset(Dataset):
         """
         if file_list_override is not None:
             file_list = list(file_list_override)
-            file_list = [
-                file for file in os.listdir(config.machine_dataset_dir)
-                if file.endswith('.pt')
-            ]
         else:
             if not config.enable_deploy_dataset:
                 # iterate all dataset in the folder
@@ -432,6 +478,7 @@ class MyCombinedDataset(Dataset):
     def clear_mem(self):
         for dataset in self.datasets:
             dataset.clear_mem()
+
 
 def split_dataset(dataset, config, shuffle=True):
     # train, val, test split
@@ -632,7 +679,7 @@ def create_dataset(data_file_path, img_root_dir, output_dir):
                   f' | index[{index}]/{len(df)}'
                   f' | elapsed: {t_elapsed:.3f}s'
                   f' | remaining: {t_elapsed / (index + 1) * (len(df) - index):.3f}s'
-                  f' | speed: {t_elapsed/(index+1)*1000}ms/frame')
+                  f' | speed: {t_elapsed / (index + 1) * 1000}ms/frame')
         img_filename = row['IMG']
         img_path = os.path.join(img_root_dir, img_filename)
 

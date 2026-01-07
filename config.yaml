@@ -27,7 +27,7 @@ batch_size: 64
 num_workers: 0  # no need to set if all data in GPU
 ## Special sampler/filter/modifier
 sys_sampling_interval: 1000  # systematic sampling interval <--------------------------------------------
-enable_standardize_feature: True
+enable_standardize_feature: False
 enable_exclude_feature: True
 enable_rtcp: 'both' # 'on_only', 'off_only' 'both'
 ## Sequence length
