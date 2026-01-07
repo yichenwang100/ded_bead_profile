@@ -240,12 +240,6 @@ def train_incremental_baseline(config):
                 if config.enable_adaptive_lr:
                     scheduler.step()
 
-                if logger is not None:
-                    logger.add_scalars("train/loss_by_domain", {d_train: train_loss_mean}, global_step=global_epoch)
-                    logger.add_scalars("train/metric_by_domain", {d_train: train_metric_mean}, global_step=global_epoch)
-                    logger.add_scalars("val/loss_by_domain", {d_train: val_loss_mean}, global_step=global_epoch)
-                    logger.add_scalars("val/metric_by_domain", {d_train: val_metric_mean}, global_step=global_epoch)
-
                 global_epoch += 1
 
             # -------------------------
@@ -267,6 +261,10 @@ def train_incremental_baseline(config):
                 loss_mat[i_trained, j_eval] = loss_mean
                 metric_mat[i_trained, j_eval] = metric_mean
                 long_log.append([phase, d_train, d_eval, loss_mean, metric_mean, global_epoch])
+
+                if logger is not None:
+                    logger.add_scalars("loss_test", {d_eval: loss_mean}, global_step=global_epoch)
+                    logger.add_scalars("metric_test", {d_eval: metric_mean}, global_step=global_epoch)
 
             print(f">metric_matrix for test set")
             pprint(metric_mat)
