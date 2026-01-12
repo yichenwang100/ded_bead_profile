@@ -481,16 +481,6 @@ def train_incremental_replay(config):
                 if config.enable_adaptive_lr:
                     scheduler.step()
 
-                if logger is not None:
-                    logger.add_scalars("train/loss_by_domain", {d_train: train_loss_mean},
-                                       global_step=global_epoch)
-                    logger.add_scalars("train/metric_by_domain", {d_train: train_metric_mean},
-                                       global_step=global_epoch)
-                    logger.add_scalars("val/loss_by_domain", {d_train: val_loss_mean},
-                                       global_step=global_epoch)
-                    logger.add_scalars("val/metric_by_domain", {d_train: val_metric_mean},
-                                       global_step=global_epoch)
-
                 global_epoch += 1
 
             # after training this domain, add it to replay memory
@@ -511,6 +501,10 @@ def train_incremental_replay(config):
                 loss_mat[i_trained, j_eval] = loss_mean
                 metric_mat[i_trained, j_eval] = metric_mean
                 long_log.append([phase, d_train, d_eval, loss_mean, metric_mean, global_epoch])
+
+                if logger is not None:
+                    logger.add_scalars("loss_test", {d_eval: loss_mean}, global_step=global_epoch)
+                    logger.add_scalars("metric_test", {d_eval: metric_mean}, global_step=global_epoch)
 
             print(f"> [Replay] metric_matrix (test)")
             pprint(metric_mat)
@@ -751,13 +745,6 @@ def train_incremental_regularization(config):
                 if config.enable_adaptive_lr:
                     scheduler.step()
 
-                if logger is not None:
-                    logger.add_scalars("train/loss_by_domain", {d_train: train_loss_mean}, global_step=global_epoch)
-                    logger.add_scalars("train/metric_by_domain", {d_train: train_metric_mean},
-                                       global_step=global_epoch)
-                    logger.add_scalars("val/loss_by_domain", {d_train: val_loss_mean}, global_step=global_epoch)
-                    logger.add_scalars("val/metric_by_domain", {d_train: val_metric_mean}, global_step=global_epoch)
-
                 global_epoch += 1
 
             # After finishing this domain: update theta* and fisher*
@@ -794,6 +781,10 @@ def train_incremental_regularization(config):
                 loss_mat[i_trained, j_eval] = loss_mean
                 metric_mat[i_trained, j_eval] = metric_mean
                 long_log.append([phase, d_train, d_eval, loss_mean, metric_mean, global_epoch])
+
+                if logger is not None:
+                    logger.add_scalars("loss_test", {d_eval: loss_mean}, global_step=global_epoch)
+                    logger.add_scalars("metric_test", {d_eval: metric_mean}, global_step=global_epoch)
 
             print(f"> [Regularize] metric_matrix for test set")
             pprint(metric_mat)
@@ -974,13 +965,6 @@ def train_incremental_distillation(config):
                 if config.enable_adaptive_lr:
                     scheduler.step()
 
-                if logger is not None:
-                    logger.add_scalars("train/loss_by_domain", {d_train: train_loss_mean}, global_step=global_epoch)
-                    logger.add_scalars("train/metric_by_domain", {d_train: train_metric_mean},
-                                       global_step=global_epoch)
-                    logger.add_scalars("val/loss_by_domain", {d_train: val_loss_mean}, global_step=global_epoch)
-                    logger.add_scalars("val/metric_by_domain", {d_train: val_metric_mean}, global_step=global_epoch)
-
                 global_epoch += 1
 
             # Evaluate on all domains
@@ -996,6 +980,10 @@ def train_incremental_distillation(config):
                 loss_mat[i_trained, j_eval] = loss_mean
                 metric_mat[i_trained, j_eval] = metric_mean
                 long_log.append([phase, d_train, d_eval, loss_mean, metric_mean, global_epoch])
+
+                if logger is not None:
+                    logger.add_scalars("loss_test", {d_eval: loss_mean}, global_step=global_epoch)
+                    logger.add_scalars("metric_test", {d_eval: metric_mean}, global_step=global_epoch)
 
             print(f"> [KD] metric_matrix (test)")
             pprint(metric_mat)
@@ -1034,5 +1022,5 @@ if __name__ == '__main__':
     config = get_config_from_cmd(parser)
     # train_incremental_baseline(config)    # baseline
     # train_incremental_replay(config)    # replay
-    train_incremental_regularization(config)  # regularize
-    # train_incremental_distillation(config)    # distill
+    # train_incremental_regularization(config)  # regularize
+    train_incremental_distillation(config)    # distill
